@@ -120,24 +120,59 @@ function highlight(code: string, lang: string): ReactNode[] {
   return out
 }
 
-function CodeBlock({ code, lang }: { code: string; lang: string }) {
+const EXT: Record<string, string> = {
+  javascript: 'js', js: 'js', jsx: 'jsx', typescript: 'ts', ts: 'ts', tsx: 'tsx', json: 'json', python: 'py', py: 'py', bash: 'sh', sh: 'sh', shell: 'sh', zsh: 'sh',
+  powershell: 'ps1', ps1: 'ps1', sql: 'sql', html: 'html', css: 'css', markdown: 'md', md: 'md', yaml: 'yml', yml: 'yml', xml: 'xml', java: 'java', c: 'c',
+  cpp: 'cpp', csharp: 'cs', cs: 'cs', go: 'go', rust: 'rs', rs: 'rs', php: 'php', ruby: 'rb', rb: 'rb', csv: 'csv', toml: 'toml', ini: 'ini', dockerfile: 'Dockerfile',
+}
+
+const FILE_NAME = /(?:^|[\s`'"(*])([\w.-]+(?:\/[\w.-]+)*\.(?:json|jsx?|tsx?|py|sh|ps1|sql|html?|css|md|ya?ml|xml|java|cpp?|cs|go|rs|php|rb|csv|toml|ini|txt|env|bat|cmd))(?=$|[\s`'")*:,.])/gi
+
+/** File name for the download: named on the fence line, or in the text just above the block, or "code" plus the language's extension. */
+function downloadName(lang: string, info: string, above: string): string {
+  const named = FILE_NAME.exec(info) ?? null
+  FILE_NAME.lastIndex = 0
+  if (named) return named[1].split('/').pop()!
+  const all = [...above.matchAll(FILE_NAME)]
+  if (all.length) return all[all.length - 1][1].split('/').pop()!
+  const ext = EXT[lang.toLowerCase()]
+  return ext === 'Dockerfile' ? 'Dockerfile' : `code.${ext ?? 'txt'}`
+}
+
+function download(name: string, text: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 4000)
+}
+
+function CodeBlock({ code, lang, file }: { code: string; lang: string; file: string }) {
   const [copied, setCopied] = useState(false)
   const colored = useMemo(() => highlight(code, lang), [code, lang])
   return (
     <div className="md-code">
       <div className="md-code-head">
         <span>{lang || 'code'}</span>
-        <button
-          type="button"
-          onClick={() => {
-            navigator.clipboard?.writeText(code).then(() => {
-              setCopied(true)
-              setTimeout(() => setCopied(false), 1500)
-            })
-          }}
-        >
-          {copied ? 'Copied' : 'Copy'}
-        </button>
+        <span className="md-code-actions">
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard?.writeText(code).then(() => {
+                setCopied(true)
+                setTimeout(() => setCopied(false), 1500)
+              })
+            }}
+          >
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+          <button type="button" onClick={() => download(file, code)} title={`Save as ${file}`}>
+            Download
+          </button>
+        </span>
       </div>
       <pre>
         <code>{colored}</code>
@@ -149,7 +184,7 @@ function CodeBlock({ code, lang }: { code: string; lang: string }) {
 // ---------- Blocks ----------
 
 type Block =
-  | { t: 'code'; lang: string; code: string }
+  | { t: 'code'; lang: string; code: string; file: string }
   | { t: 'heading'; level: number; text: string }
   | { t: 'hr' }
   | { t: 'quote'; text: string }
@@ -157,7 +192,7 @@ type Block =
   | { t: 'table'; head: string[]; align: ('left' | 'center' | 'right' | undefined)[]; rows: string[][] }
   | { t: 'para'; text: string }
 
-const FENCE = /^\s{0,3}(`{3,}|~{3,})\s*([\w+#.-]*)\s*$/
+const FENCE = /^\s{0,3}(`{3,}|~{3,})\s*([\w+#.-]*)\s*([^`]*)$/
 const HEADING = /^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$/
 const HR = /^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/
 const BULLET = /^(\s*)([-*+])\s+(.*)$/
@@ -195,7 +230,9 @@ function parseBlocks(src: string): Block[] {
       // An unclosed fence (a reply that is still streaming) takes the rest of the text.
       while (i < lines.length && !new RegExp(`^\\s{0,3}${marker[0]}{${marker.length},}\\s*$`).test(lines[i])) body.push(lines[i++])
       i++
-      blocks.push({ t: 'code', lang: fence[2], code: body.join('\n') })
+      const prev = blocks[blocks.length - 1]
+      const above = prev && (prev.t === 'para' || prev.t === 'heading') ? prev.text : ''
+      blocks.push({ t: 'code', lang: fence[2], code: body.join('\n'), file: downloadName(fence[2], fence[3], above) })
       continue
     }
 
@@ -281,7 +318,7 @@ function withBreaks(text: string, key: string): ReactNode[] {
 function renderBlock(b: Block, key: string): ReactNode {
   switch (b.t) {
     case 'code':
-      return <CodeBlock key={key} code={b.code} lang={b.lang} />
+      return <CodeBlock key={key} code={b.code} lang={b.lang} file={b.file} />
     case 'heading': {
       const Tag = `h${Math.min(6, b.level + 1)}` as 'h2'
       return <Tag key={key}>{inline(b.text, key)}</Tag>

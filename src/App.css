@@ -615,6 +615,11 @@
   font-size: 12px;
 }
 
+.md-code-actions {
+  display: flex;
+  gap: 14px;
+}
+
 .md-code-head button {
   color: var(--muted);
   font-size: 12px;
