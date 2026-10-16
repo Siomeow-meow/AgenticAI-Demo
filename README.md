@@ -1,13 +1,8 @@
 # Acme Assistant
 
-A React + TypeScript (Vite) assistant that runs entirely on your machine. It has two ways to answer:
+A React + TypeScript (Vite) AI assistant that runs entirely on your machine through [Ollama](https://ollama.com): 177 tools in 28 categories, advanced RAG over a knowledge base, long-term memory, and file and image understanding. No account, API key or server is needed.
 
-| Model (top-right picker) | Runs where | What it can do |
-|---|---|---|
-| **Ollama models** | Your machine (Ollama) | 177 tools in 28 categories, advanced RAG over the knowledge base, long-term memory, attached files and images |
-| **Basic (no AI model)** | Your browser | Keyword rules only |
-
-No account, API key or server is needed.
+The assistant tunes itself to the model you have installed (context size, tools per question, step limit, reasoning), so a small model on a laptop and a large model on a workstation both work. If the model you last used isn't installed on this machine, it picks the most capable installed model that supports tools.
 
 ## Setup
 
@@ -19,7 +14,7 @@ npm install
 npm run dev
 ```
 
-Open the address Vite prints (usually http://localhost:5173) and pick a model in the model menu. Pick one that shows **tools** next to its name, because the assistant relies on tool calling. Small models (3B) work but are less reliable than 7B and up. The **Models** tab can pull and delete models.
+Open the address Vite prints (usually http://localhost:5173) and pick a model in the box next to the send button. Pick one that shows **tools** next to its name, because the assistant relies on tool calling. Small models (3B) work but are less reliable than 7B and up. The **Models** tab can pull and delete models.
 
 ### Optional: semantic search
 
@@ -67,7 +62,7 @@ Open the address Vite prints (usually http://localhost:5173) and pick a model in
 |---|---|
 | `src/App.tsx` | App shell: model choice, chat state, views |
 | `src/ai/llm.ts` | Agent loop for Ollama models: system prompt, tool calling, streaming |
-| `src/ai/agent.ts` | Offline rule-based agent (Basic mode) |
+| `src/ai/profile.ts` | Tunes the agent to the installed model: context size, tools per question, steps, reasoning |
 | `src/ai/router.ts` | Picks the few tools shown to the model for each question |
 | `src/ai/rag.ts` | Chunking, keyword (TF-IDF) search, optional semantic search, rank fusion |
 | `src/ai/rag-advanced.ts` | Entity graph, reranking, parent-child expansion, query rewriting, HyDE, grading and corrective retrieval |

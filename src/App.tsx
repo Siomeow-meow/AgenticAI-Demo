@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { createAgent } from './ai/agent'
 import { sampleDocs } from './ai/documents'
 import type { SourceDoc } from './ai/documents'
 import { describeAttachments, ingestFiles } from './ai/files'
 import { quickHelp, toolkitAnswer } from './ai/help'
 import type { Attachment } from './ai/files'
 import { learnedDoc } from './ai/ingest'
-import { createLlmAgent, DEFAULT_MODEL, modelOption, OFFLINE, unloadModel } from './ai/llm'
+import { createLlmAgent, DEFAULT_MODEL, modelOption, unloadModel } from './ai/llm'
 import type { ProfileChoice } from './ai/profile'
 import { buildSemantic, checkEmbedModel, EMBED_MODEL, listChatModels } from './ai/ollama'
 import type { InstalledModel } from './ai/ollama'
@@ -45,8 +44,6 @@ function App() {
   const [internet, setInternet] = useLocalStorage<boolean>('acme-assistant-internet', false)
   const [semanticOn, setSemanticOn] = useLocalStorage<boolean>('acme-assistant-semantic', false)
   const [storedModelId, setModelId] = useLocalStorage<string>('acme-assistant-model', DEFAULT_MODEL)
-  // The old "Hosted" model is gone; anyone who had it selected falls back to the default.
-  const modelId = storedModelId === 'hosted' ? DEFAULT_MODEL : storedModelId
   const [profileChoice, setProfileChoice] = useLocalStorage<ProfileChoice>('acme-assistant-profile', 'auto')
   const [embedReady, setEmbedReady] = useState(false)
   const [built, setBuilt] = useState<{ index: Index; semantic: Semantic } | null>(null)
@@ -55,11 +52,19 @@ function App() {
   const [notice, setNotice] = useState<string | null>(null)
   const [installed, setInstalled] = useState<InstalledModel[] | null | 'checking'>('checking')
 
+  // The model in use: the saved choice, or (if that one is not installed here, or it was the removed Hosted/Basic option)
+  // the most capable installed model that can use tools, so the app works on any machine without picking one.
+  const installedList = Array.isArray(installed) ? installed : []
+  const modelId = (() => {
+    if (!installedList.length || installedList.some((m) => m.name === storedModelId)) return storedModelId === 'hosted' || storedModelId === 'offline' ? DEFAULT_MODEL : storedModelId
+    const best = [...installedList].sort((x, y) => Number(y.tools) - Number(x.tools) || y.sizeGB - x.sizeGB)[0]
+    return best.name
+  })()
+
   const docs = useMemo(() => [...sampleDocs, ...uploaded], [uploaded])
   const index = useMemo(() => buildIndex(docs), [docs])
   const semantic = semanticOn && built?.index === index ? built.semantic : null
   const ctx = useMemo(() => ({ index, docs, semantic }), [index, docs, semantic])
-  const offline = useMemo(() => createAgent(ctx), [ctx])
   const llm = useMemo(() => createLlmAgent(ctx), [ctx])
   const allTools = llm.tools
 
@@ -119,13 +124,15 @@ function App() {
 
   // Why the AI model is not being used (shown under the top bar), or null when it is.
   const llmStatus: string | null =
-    installed === 'checking' || modelId === OFFLINE
+    installed === 'checking'
       ? null
       : installed === null
-        ? 'Ollama is not running at http://127.0.0.1:11434'
+        ? 'Ollama is not running at http://127.0.0.1:11434. Start it to chat'
         : usingLlm
           ? null
-          : `Model not found. Run: ollama pull ${modelId}`
+          : installed.length === 0
+            ? 'No AI model is installed. Open the Models tab to download one, or run: ollama pull qwen2.5:7b'
+            : `Model not found. Run: ollama pull ${modelId}`
 
   function chooseModel(next: string) {
     if (model && next !== model.id) unloadModel(model.id) // free its RAM straight away
@@ -138,12 +145,12 @@ function App() {
     setView('chat')
     setPending({ question: q, text: '', attachments })
     try {
-      // Right after the page opens the model list may still be loading: wait for it rather than silently using the basic agent.
+      // Right after the page opens the model list may still be loading: wait for it.
       let active = model
       if (installed === 'checking') {
         const list = await listChatModels()
         setInstalled(list)
-        const f = list?.find((m) => m.name === modelId)
+        const f = list?.find((m) => m.name === modelId) ?? [...(list ?? [])].sort((x, y) => Number(y.tools) - Number(x.tools) || y.sizeGB - x.sizeGB)[0]
         active = f && modelOption(f, profileChoice)
       }
       // The model is told which files were attached; the chat only shows the question and the file chips.
@@ -156,7 +163,7 @@ function App() {
         ? { text: help, calls: [], sources: [] }
         : active
         ? await llm.respond(history, q + describeAttachments(attachments), (text) => setPending({ question: q, text, attachments }), internet, active, attachments)
-        : await offline.respond(q)
+        : { text: `${llmStatus ?? 'No AI model is available.'}. Pick a model in the message box, or open the Models tab.`, calls: [], sources: [] }
       setTurns((t) => [...t, { question: q, reply, attachments }])
     } catch (e) {
       const text = `Error: ${(e as Error).message}`
@@ -205,8 +212,8 @@ function App() {
     { id: 'workspace', label: 'Workspace', icon: '✅' },
   ]
 
-  const dot = usingLlm ? 'ok' : installed === 'checking' || modelId === OFFLINE ? 'idle' : 'warn'
-  const activeLabel = model ? model.id : 'Basic mode'
+  const dot = usingLlm ? 'ok' : installed === 'checking' ? 'idle' : 'warn'
+  const activeLabel = model ? model.id : 'No model'
 
   return (
     <div className="shell">
@@ -237,7 +244,7 @@ function App() {
         </nav>
         <div className="rail-foot">
           <span className={`dot ${dot}`} />
-          <span>{usingLlm ? activeLabel : modelId === OFFLINE ? 'Basic mode' : installed === 'checking' ? 'Checking…' : 'No model'}</span>
+          <span>{installed === 'checking' ? 'Checking…' : activeLabel}</span>
         </div>
       </aside>
 
@@ -254,7 +261,7 @@ function App() {
             </div>
           </div>
         </header>
-        {llmStatus && <p className="banner warn">{llmStatus} - using the basic rule-based agent.</p>}
+        {llmStatus && <p className="banner warn">{llmStatus}.</p>}
         {notice && <p className="banner ok">{notice}</p>}
 
         {view === 'chat' && (

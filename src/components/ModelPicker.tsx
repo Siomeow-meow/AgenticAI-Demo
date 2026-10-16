@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { OFFLINE } from '../ai/llm'
 import type { InstalledModel } from '../ai/ollama'
 
 interface Props {
@@ -18,7 +17,7 @@ export function ModelPicker({ installed, modelId, dot, disabled, onChoose, onMan
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   const list = Array.isArray(installed) ? installed : []
-  const known = modelId === OFFLINE || list.some((m) => m.name === modelId)
+  const known = list.some((m) => m.name === modelId)
 
   // Close on outside click or Escape.
   useEffect(() => {
@@ -37,7 +36,7 @@ export function ModelPicker({ installed, modelId, dot, disabled, onChoose, onMan
     }
   }, [open])
 
-  const current = modelId === OFFLINE ? 'Basic (no AI model)' : modelId
+  const current = modelId
   const choose = (id: string) => {
     setOpen(false)
     if (id !== modelId) onChoose(id)
@@ -90,13 +89,6 @@ export function ModelPicker({ installed, modelId, dot, disabled, onChoose, onMan
             </div>
           )}
 
-          <button type="button" role="menuitemradio" aria-checked={modelId === OFFLINE} className={`model-item${modelId === OFFLINE ? ' active' : ''}`} onClick={() => choose(OFFLINE)}>
-            <span className="item-main">
-              <span className="item-name">Basic (no AI model)</span>
-              <span className="item-meta">simple keyword rules, works without Ollama</span>
-            </span>
-            {modelId === OFFLINE && <span className="check">✓</span>}
-          </button>
 
           <button
             type="button"

@@ -20,7 +20,7 @@ export function setGenerateModel(model: Active | null) {
   active = model
 }
 
-/** True when a model is available for tools that want to ask one (false in Basic mode). */
+/** True when a model is available for tools that want to ask one (false when no model is installed or selected). */
 export const canGenerate = () => active !== null
 
 interface Options {
@@ -37,7 +37,7 @@ interface Options {
 /** One non-streaming model call. Throws when no model is available. */
 export async function generate(prompt: string, opts: Options = {}): Promise<string> {
   const model = opts.model ?? active?.id
-  if (!model) throw new Error('No AI model is selected (Basic mode).')
+  if (!model) throw new Error('No AI model is available.')
   const res = await ollama.chat({
     model,
     messages: [

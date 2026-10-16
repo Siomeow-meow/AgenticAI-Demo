@@ -33,9 +33,6 @@ export function modelOption(m: InstalledModel, choice: ProfileChoice = 'auto'): 
 /** Starting model; override with VITE_OLLAMA_MODEL in .env.local. Switch any time from the header. */
 export const DEFAULT_MODEL: string = import.meta.env.VITE_OLLAMA_MODEL ?? 'qwen2.5:3b'
 
-/** Picker value that turns the AI model off and uses the basic rule-based agent. */
-export const OFFLINE = 'offline'
-
 /** Ideas shown in the Models tab. Any tag from the Ollama library can also be typed in. */
 export const SUGGESTED_MODELS = [
   { id: 'qwen2.5:3b', note: '1.9 GB, fast, good at tools' },

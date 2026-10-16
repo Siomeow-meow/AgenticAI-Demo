@@ -110,7 +110,6 @@ export function Toolkit({ tools, internet, onInternet, onTry }: Props) {
                   <header>
                     <code>{t.name}</code>
                     {t.network && <span className="tag net">internet</span>}
-                    {t.match && <span className="tag off">works offline</span>}
                   </header>
                   <p>{t.description}</p>
                   {Object.keys(t.parameters).length > 0 && (
