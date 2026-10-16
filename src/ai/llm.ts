@@ -1,13 +1,14 @@
 import type { Message, ToolCall as OllamaToolCall } from 'ollama/browser'
+import { runtime, setGenerateModel, tryGenerate } from './generate'
 import { ollama } from './ollama'
-import { toSources } from './rag'
 import type { Source } from './rag'
 import { selectTools } from './router'
 import { createTools } from './tools'
-import { smartRetrieve } from './tools/knowledge'
+import { memoryPrompt } from './tools/memory'
 import type { ToolCall, ToolContext } from './tools'
 import type { AgentReply } from './agent'
 import type { Attachment } from './files'
+import { aboutOtherProduct } from './help'
 
 /** The model used for a reply. Built from what Ollama reports about each installed model. */
 export interface ModelOption {
@@ -77,7 +78,28 @@ function systemPrompt(docs: ToolContext['docs']) {
 - For policies, procedures, IT help and company knowledge, search the knowledge base first and cite passages like [leave-policy#1]. ${describeDocs(docs)}
 - Users can send you files with the paperclip button (or by dropping them in the chat): CSV, Excel, PDF, Word, PowerPoint, JSON and text. Attached tables are searchable and can be totalled; attached documents are searchable and cited. If asked whether they can send data or files, say yes and explain this.
 - If the user's message ends with [Attached files: ...], work from those files: analyse tables with profile_dataset, query_dataset and aggregate_dataset, and read documents with search_knowledge_base, read_document or summarize_document. Never guess at their contents.
+- Questions about other products or companies (Claude, ChatGPT, etc.) are general-knowledge questions: answer briefly from what you know, say plainly if you are unsure, and do not describe your own tools unless asked about them.
+- Maths: use calculator for expressions (it has sqrt, sin, log, factorials, pi...), and solve_equation, derivative, integral, series_sum and matrix_op for algebra and calculus. Never do arithmetic in your head.
+- Knowledge questions: search_knowledge_base first; if it finds nothing useful use research_knowledge_base (slower, checks relevance), deep_research for questions needing several facts, search_everything when you do not know where something is, and explore_graph for how topics relate.
+- Attached images (shown as image "img-1"): use analyze_image. To act on things, use the workflow, communication, file and code tools; remember and recall keep facts long-term. Emails and messages are only drafted: tell the user to open the link to send them.
 - Greetings and general-knowledge questions can be answered directly without tools.`
+}
+
+let summary = { len: 0, first: '', text: '' }
+
+/** A short summary of the conversation older than the messages sent verbatim, so long chats do not lose their beginning. */
+async function earlierSummary(older: ChatMsg[]): Promise<string> {
+  if (!older.length) return ''
+  const first = older[0].content.slice(0, 80)
+  // Reuse the last summary until a few more messages have scrolled out of the window.
+  if (summary.first === first && older.length - summary.len < 4) return summary.text
+  const text = older.map((m) => `${m.role}: ${m.content.slice(0, 500)}`).join('\n').slice(-6000)
+  const written = await tryGenerate(
+    `Summarize this earlier part of a conversation in at most 5 short bullet points. Keep names, numbers, decisions and open questions.\n\n${text}`,
+    { maxTokens: 200 },
+  )
+  summary = { len: older.length, first, text: written ?? summary.text }
+  return summary.text
 }
 
 export function createLlmAgent(ctx: ToolContext) {
@@ -97,18 +119,21 @@ export function createLlmAgent(ctx: ToolContext) {
     model: ModelOption,
     attached: Attachment[] = [],
   ): Promise<AgentReply> {
+    setGenerateModel({ id: model.id, thinking: model.thinking })
+    runtime.network = allowNetwork
     // Files in the chat: always offer the tools that can read them.
     const forced = [
       'search_knowledge_base',
+      ...(attached.some((a) => a.kind === 'image') ? ['analyze_image'] : []),
       ...(attached.some((a) => a.kind === 'table') ? ['profile_dataset', 'query_dataset', 'aggregate_dataset'] : []),
       ...(attached.some((a) => a.kind === 'document') ? ['read_document', 'summarize_document'] : []),
     ]
-    const offeredTools = selectTools(
-      tools.filter((t) => allowNetwork || !t.network),
-      question,
-      3,
-      forced,
-    )
+    const usable = tools.filter((t) => allowNetwork || !t.network)
+    // A question about another product (Claude, ChatGPT...) is general knowledge. Our documents and our own tool
+    // list cannot help, and offering them makes a small model search them anyway, so only Wikipedia is offered.
+    const offeredTools = aboutOtherProduct(question)
+      ? usable.filter((t) => t.name === 'wikipedia')
+      : selectTools(usable, question, 3, forced)
     const schemas = offeredTools.map((t) => ({
       type: 'function' as const,
       function: {
@@ -125,15 +150,18 @@ export function createLlmAgent(ctx: ToolContext) {
     }))
     const offered = offeredTools.map((t) => t.name)
 
+    const recent = history.slice(-8)
+    const earlier = await earlierSummary(history.slice(0, -8))
     const messages: Message[] = [
-      { role: 'system', content: system },
-      ...history.slice(-8),
+      { role: 'system', content: system + memoryPrompt() },
+      ...(earlier ? [{ role: 'system' as const, content: `Summary of the earlier conversation:\n${earlier}` }] : []),
+      ...recent,
       { role: 'user', content: question },
     ]
     const calls: ToolCall[] = []
     const sources = new Map<string, Source>()
 
-    for (let step = 0; step < 5; step++) {
+    for (let step = 0; step < 6; step++) {
       const stream = await ollama.chat({
         model: model.id,
         messages,
@@ -173,9 +201,10 @@ export function createLlmAgent(ctx: ToolContext) {
           result = `Tool error: ${(e as Error).message}`
         }
         calls.push({ tool: c.function.name, args, result })
-        if (c.function.name === 'search_knowledge_base') {
-          const { hits } = await smartRetrieve(ctx, args.query, args.document)
-          for (const s of toSources(hits)) sources.set(s.id, s)
+        // Any tool that quotes passages as [document#n] adds them to the sources shown under the answer.
+        for (const m of result.matchAll(/\[([^\]\s#]+#\d+)\]/g)) {
+          const chunk = ctx.index.chunks.find((x) => x.id === m[1])
+          if (chunk && !sources.has(chunk.id)) sources.set(chunk.id, { id: chunk.id, title: chunk.title, score: 1 })
         }
         messages.push({ role: 'tool', tool_name: c.function.name, content: result })
       }

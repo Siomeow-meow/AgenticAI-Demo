@@ -1,0 +1,41 @@
+{
+  "domain": "lms",
+  "display_name": "Learning Management System",
+  "description": "Internal training: learning paths, modules and employee enrollments. Copy this file into data/schemas/ to add the domain live.",
+  "entities": {
+    "learning_paths": {
+      "description": "Curated training tracks",
+      "id_prefix": "LP", "seed_count": 4,
+      "fields": {
+        "id": "string",
+        "title": {"type": "string", "unique": true, "examples": ["New Hire Onboarding", "Data Privacy Essentials", "Leadership Basics", "POS Operations"]},
+        "owner": "person",
+        "mandatory": {"type": "boolean", "unique": true, "examples": [true, true, false, false]},
+        "estimated_hours": {"type": "integer", "min": 2, "max": 12}
+      }
+    },
+    "modules": {
+      "description": "Lessons inside a learning path",
+      "id_prefix": "MOD", "seed_count": 10,
+      "fields": {
+        "id": "string",
+        "path_id": {"type": "string", "ref": "lms.learning_paths"},
+        "title": {"type": "string", "examples": ["Welcome & culture", "Handling customer data", "Retention rules", "Giving feedback", "Running a shift", "Cash reconciliation", "Security basics"]},
+        "format": {"type": "string", "enum": ["video", "reading", "quiz", "workshop"]},
+        "minutes": {"type": "integer", "min": 10, "max": 90}
+      }
+    },
+    "enrollments": {
+      "description": "Employees enrolled in learning paths (links to hris.employees)",
+      "id_prefix": "ENR", "seed_count": 15,
+      "fields": {
+        "id": "string",
+        "employee_id": {"type": "string", "ref": "hris.employees", "required": true},
+        "path_id": {"type": "string", "ref": "lms.learning_paths", "required": true},
+        "progress_pct": {"type": "integer", "min": 0, "max": 100},
+        "status": {"type": "string", "enum": ["not_started", "in_progress", "completed", "overdue"]},
+        "due_date": {"type": "date", "range_days": [-15, 60]}
+      }
+    }
+  }
+}

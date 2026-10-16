@@ -1,0 +1,227 @@
+{
+  "domain": "pos",
+  "display_name": "Point of Sale",
+  "description": "Store items, checkout transactions, cashier shifts and terminals.",
+  "entities": {
+    "items": {
+      "description": "Items sold at the counter",
+      "id_prefix": "ITM",
+      "seed_count": 20,
+      "fields": {
+        "id": "string",
+        "name": {
+          "type": "string",
+          "unique": true,
+          "required": true,
+          "examples": [
+            "Espresso",
+            "Cappuccino",
+            "Latte",
+            "Iced Americano",
+            "Matcha Latte",
+            "Hot Chocolate",
+            "Croissant",
+            "Blueberry Muffin",
+            "Bagel",
+            "Club Sandwich",
+            "Caesar Salad",
+            "Banana Bread",
+            "Bottled Water",
+            "Orange Juice",
+            "Chocolate Chip Cookie",
+            "Cheesecake Slice",
+            "Granola Cup",
+            "Tuna Wrap",
+            "Coffee Beans 250g",
+            "Reusable Tumbler"
+          ]
+        },
+        "barcode": {
+          "type": "string",
+          "pattern": "480{n}",
+          "start": 1000101
+        },
+        "category": {
+          "type": "string",
+          "unique": true,
+          "examples": [
+            "Beverage",
+            "Beverage",
+            "Beverage",
+            "Beverage",
+            "Beverage",
+            "Beverage",
+            "Bakery",
+            "Bakery",
+            "Bakery",
+            "Meal",
+            "Meal",
+            "Bakery",
+            "Beverage",
+            "Beverage",
+            "Bakery",
+            "Bakery",
+            "Meal",
+            "Meal",
+            "Retail",
+            "Retail"
+          ]
+        },
+        "price": {
+          "type": "number",
+          "min": 1.5,
+          "max": 25
+        },
+        "stock_qty": {
+          "type": "integer",
+          "min": 0,
+          "max": 150
+        },
+        "active": "boolean"
+      }
+    },
+    "transactions": {
+      "description": "Completed checkouts",
+      "id_prefix": "TXN",
+      "seed_count": 30,
+      "fields": {
+        "id": "string",
+        "terminal_id": {
+          "type": "string",
+          "ref": "pos.terminals"
+        },
+        "shift_id": {
+          "type": "string",
+          "ref": "pos.shifts"
+        },
+        "item_id": {
+          "type": "string",
+          "ref": "pos.items"
+        },
+        "quantity": {
+          "type": "integer",
+          "min": 1,
+          "max": 5
+        },
+        "total": {
+          "type": "number",
+          "min": 2,
+          "max": 120
+        },
+        "payment_method": {
+          "type": "string",
+          "enum": [
+            "cash",
+            "card",
+            "e-wallet"
+          ]
+        },
+        "timestamp": {
+          "type": "datetime",
+          "range_days": [
+            -14,
+            0
+          ]
+        }
+      }
+    },
+    "shifts": {
+      "description": "Cashier shifts with cash reconciliation",
+      "id_prefix": "SHF",
+      "seed_count": 5,
+      "fields": {
+        "id": "string",
+        "cashier_name": "person",
+        "terminal_id": {
+          "type": "string",
+          "ref": "pos.terminals"
+        },
+        "start_time": {
+          "type": "datetime",
+          "range_days": [
+            -7,
+            0
+          ]
+        },
+        "hours": {
+          "type": "number",
+          "min": 4,
+          "max": 9,
+          "decimals": 1
+        },
+        "opening_cash": {
+          "type": "number",
+          "min": 100,
+          "max": 300
+        },
+        "closing_cash": {
+          "type": "number",
+          "min": 400,
+          "max": 2500
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "closed"
+          ],
+          "weights": [
+            1,
+            4
+          ]
+        }
+      }
+    },
+    "terminals": {
+      "description": "Physical checkout terminals",
+      "id_prefix": "TRM",
+      "seed_count": 3,
+      "fields": {
+        "id": "string",
+        "name": {
+          "type": "string",
+          "unique": true,
+          "examples": [
+            "Front Counter",
+            "Drive-Thru",
+            "Self-Service Kiosk"
+          ]
+        },
+        "location": {
+          "type": "string",
+          "unique": true,
+          "examples": [
+            "Main Street Store",
+            "Highway Branch",
+            "Mall Kiosk"
+          ]
+        },
+        "serial_number": {
+          "type": "string",
+          "pattern": "TRM-SN-{n}",
+          "start": 88001
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "online",
+            "offline",
+            "maintenance"
+          ],
+          "weights": [
+            4,
+            1,
+            1
+          ]
+        },
+        "last_sync": {
+          "type": "datetime",
+          "range_days": [
+            -2,
+            0
+          ]
+        }
+      }
+    }
+  }
+}

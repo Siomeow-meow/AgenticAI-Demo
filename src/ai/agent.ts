@@ -54,9 +54,9 @@ export function createAgent(ctx: ToolContext) {
         return { text: result, calls, sources: [] }
       }
 
-      const hits = await retrieveHybrid(ctx.index, message, { semantic: ctx.semantic })
+      const hits = await retrieveHybrid(ctx.index, message, { semantic: ctx.semantic, minScore: 0.16 }) // stricter: this agent cannot judge relevance itself
       if (!hits.length) {
-        return { text: "I couldn't find anything relevant in the knowledge base.", calls, sources: [] }
+        return { text: "I couldn't find anything relevant in the knowledge base. For general questions, start Ollama and pick a model in the top bar.", calls, sources: [] }
       }
       const text = hits
         .slice(0, 2)

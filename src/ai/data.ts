@@ -89,6 +89,7 @@ export interface Task {
   title: string
   due: string
   done: boolean
+  assignee?: string
 }
 
 export const ticketStore = createStore<Ticket[]>('acme-assistant-tickets', [])
@@ -111,9 +112,9 @@ export function addNote(text: string): Note {
   return note
 }
 
-export function addTask(title: string, due: string): Task {
+export function addTask(title: string, due: string, assignee?: string): Task {
   const all = taskStore.get()
-  const task: Task = { id: `K-${all.length + 1}`, title, due, done: false }
+  const task: Task = { id: `K-${all.length + 1}`, title, due, done: false, ...(assignee ? { assignee } : {}) }
   taskStore.set([...all, task])
   return task
 }

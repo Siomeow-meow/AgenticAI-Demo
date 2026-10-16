@@ -1,0 +1,292 @@
+{
+  "domain": "erp",
+  "display_name": "Enterprise Resource Planning",
+  "description": "Products, vendors, sales orders, vendor invoices and purchase orders.",
+  "entities": {
+    "products": {
+      "description": "Items tracked in inventory",
+      "id_prefix": "PRD",
+      "seed_count": 15,
+      "fields": {
+        "id": "string",
+        "name": {
+          "type": "string",
+          "unique": true,
+          "required": true,
+          "examples": [
+            "Wireless Mouse",
+            "Mechanical Keyboard",
+            "27in Monitor",
+            "USB-C Dock",
+            "Office Chair",
+            "Standing Desk",
+            "Filing Cabinet",
+            "A4 Paper (box)",
+            "Toner Cartridge",
+            "Whiteboard Markers",
+            "Shipping Boxes (25)",
+            "Bubble Wrap Roll",
+            "Safety Gloves",
+            "Hard Hat",
+            "Label Printer"
+          ]
+        },
+        "sku": {
+          "type": "string",
+          "pattern": "SKU-{n}",
+          "start": 1001
+        },
+        "category": {
+          "type": "string",
+          "unique": true,
+          "examples": [
+            "Electronics",
+            "Electronics",
+            "Electronics",
+            "Electronics",
+            "Furniture",
+            "Furniture",
+            "Furniture",
+            "Office Supplies",
+            "Office Supplies",
+            "Office Supplies",
+            "Packaging",
+            "Packaging",
+            "Industrial",
+            "Industrial",
+            "Electronics"
+          ]
+        },
+        "price": {
+          "type": "number",
+          "min": 5,
+          "max": 600
+        },
+        "stock": {
+          "type": "integer",
+          "min": 0,
+          "max": 70
+        },
+        "reorder_point": {
+          "type": "integer",
+          "min": 10,
+          "max": 30
+        },
+        "vendor_id": {
+          "type": "string",
+          "ref": "erp.vendors"
+        }
+      }
+    },
+    "vendors": {
+      "description": "Suppliers we buy from",
+      "id_prefix": "VEN",
+      "seed_count": 8,
+      "fields": {
+        "id": "string",
+        "name": {
+          "type": "string",
+          "unique": true,
+          "required": true,
+          "examples": [
+            "Northwind Office Supply",
+            "Apex Components",
+            "BrightLine Packaging",
+            "Cobalt Logistics",
+            "Delta Furniture Co",
+            "Falcon Electronics",
+            "Granite Industrial",
+            "Harbor Tech"
+          ]
+        },
+        "contact_email": "email",
+        "phone": "phone",
+        "payment_terms": {
+          "type": "string",
+          "enum": [
+            "Net 15",
+            "Net 30",
+            "Net 45",
+            "Net 60"
+          ]
+        },
+        "rating": {
+          "type": "number",
+          "min": 2.5,
+          "max": 5,
+          "decimals": 1,
+          "description": "Quarterly vendor score, 1-5"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "probation"
+          ],
+          "weights": [
+            6,
+            2
+          ]
+        }
+      }
+    },
+    "orders": {
+      "description": "Customer sales orders",
+      "id_prefix": "ORD",
+      "seed_count": 10,
+      "fields": {
+        "id": "string",
+        "customer_name": {
+          "type": "string",
+          "examples": [
+            "Acme Corp",
+            "Globex Retail",
+            "Initech Foods",
+            "Umbrella Clinics",
+            "Stark Fitness",
+            "Wayne Hotels"
+          ]
+        },
+        "product_id": {
+          "type": "string",
+          "ref": "erp.products"
+        },
+        "quantity": {
+          "type": "integer",
+          "min": 1,
+          "max": 50
+        },
+        "total_amount": {
+          "type": "number",
+          "min": 50,
+          "max": 20000
+        },
+        "order_date": {
+          "type": "date",
+          "range_days": [
+            -60,
+            0
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "confirmed",
+            "shipped",
+            "delivered",
+            "cancelled"
+          ]
+        }
+      }
+    },
+    "invoices": {
+      "description": "Bills received from vendors (accounts payable)",
+      "id_prefix": "INV",
+      "seed_count": 12,
+      "fields": {
+        "id": "string",
+        "invoice_number": {
+          "type": "string",
+          "pattern": "VI-{n}",
+          "start": 24001,
+          "description": "The vendor's own invoice number"
+        },
+        "vendor_id": {
+          "type": "string",
+          "ref": "erp.vendors",
+          "required": true
+        },
+        "amount": {
+          "type": "number",
+          "min": 150,
+          "max": 15000,
+          "required": true
+        },
+        "issue_date": {
+          "type": "date",
+          "range_days": [
+            -75,
+            -1
+          ]
+        },
+        "due_date": {
+          "type": "date",
+          "range_days": [
+            -20,
+            40
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "paid",
+            "unpaid",
+            "overdue"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "examples": [
+            "Office supplies",
+            "Hardware restock",
+            "Freight charges",
+            "Furniture order",
+            "Quarterly maintenance"
+          ]
+        }
+      }
+    },
+    "purchase_orders": {
+      "description": "Orders we place with vendors",
+      "id_prefix": "PO",
+      "seed_count": 6,
+      "fields": {
+        "id": "string",
+        "vendor_id": {
+          "type": "string",
+          "ref": "erp.vendors",
+          "required": true
+        },
+        "product_id": {
+          "type": "string",
+          "ref": "erp.products"
+        },
+        "quantity": {
+          "type": "integer",
+          "min": 5,
+          "max": 200
+        },
+        "amount": {
+          "type": "number",
+          "min": 100,
+          "max": 12000
+        },
+        "order_date": {
+          "type": "date",
+          "range_days": [
+            -45,
+            0
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "approved",
+            "sent",
+            "received"
+          ]
+        },
+        "notes": {
+          "type": "string",
+          "examples": [
+            "Routine restock",
+            "Urgent: below reorder point",
+            "Quarterly contract order"
+          ]
+        }
+      }
+    }
+  }
+}

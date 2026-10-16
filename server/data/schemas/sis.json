@@ -1,0 +1,215 @@
+{
+  "domain": "sis",
+  "display_name": "Student Information System",
+  "description": "Students (with tuition status), courses, grades and faculty.",
+  "entities": {
+    "students": {
+      "description": "Enrolled students. Parent/guardian contacts live in crm.contacts (student_id).",
+      "id_prefix": "STU",
+      "seed_count": 20,
+      "fields": {
+        "id": "string",
+        "full_name": {
+          "type": "person",
+          "required": true
+        },
+        "email": "email",
+        "year_level": {
+          "type": "integer",
+          "min": 7,
+          "max": 12
+        },
+        "program": {
+          "type": "string",
+          "enum": [
+            "STEM",
+            "Humanities",
+            "Business",
+            "Arts"
+          ]
+        },
+        "enrollment_date": {
+          "type": "date",
+          "range_days": [
+            -1200,
+            -30
+          ]
+        },
+        "tuition_status": {
+          "type": "string",
+          "enum": [
+            "paid",
+            "unpaid",
+            "partial"
+          ],
+          "weights": [
+            10,
+            5,
+            5
+          ]
+        },
+        "tuition_balance": {
+          "type": "number",
+          "min": 300,
+          "max": 4500,
+          "only_if": {
+            "tuition_status": [
+              "unpaid",
+              "partial"
+            ]
+          },
+          "otherwise": 0
+        },
+        "gpa": {
+          "type": "number",
+          "min": 1.8,
+          "max": 4.0,
+          "decimals": 2
+        }
+      }
+    },
+    "courses": {
+      "description": "Courses offered this term",
+      "id_prefix": "CRS",
+      "seed_count": 6,
+      "fields": {
+        "id": "string",
+        "code": {
+          "type": "string",
+          "unique": true,
+          "examples": [
+            "MATH101",
+            "SCI201",
+            "ENG110",
+            "HIST150",
+            "CS120",
+            "ART105"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "unique": true,
+          "examples": [
+            "Algebra I",
+            "General Biology",
+            "English Composition",
+            "World History",
+            "Intro to Programming",
+            "Foundations of Art"
+          ]
+        },
+        "faculty_id": {
+          "type": "string",
+          "ref": "sis.faculty"
+        },
+        "credits": {
+          "type": "integer",
+          "min": 1,
+          "max": 4
+        },
+        "room": {
+          "type": "string",
+          "examples": [
+            "A-101",
+            "B-204",
+            "C-310",
+            "Lab 2",
+            "Studio 1"
+          ]
+        },
+        "schedule": {
+          "type": "string",
+          "examples": [
+            "Mon/Wed 08:00",
+            "Tue/Thu 10:00",
+            "Mon/Wed/Fri 13:00",
+            "Fri 09:00"
+          ]
+        }
+      }
+    },
+    "grades": {
+      "description": "Course scores per student per term",
+      "id_prefix": "GRD",
+      "seed_count": 40,
+      "fields": {
+        "id": "string",
+        "student_id": {
+          "type": "string",
+          "ref": "sis.students",
+          "required": true
+        },
+        "course_id": {
+          "type": "string",
+          "ref": "sis.courses",
+          "required": true
+        },
+        "term": {
+          "type": "string",
+          "enum": [
+            "2026-T1",
+            "2026-T2"
+          ]
+        },
+        "score": {
+          "type": "number",
+          "min": 55,
+          "max": 100,
+          "decimals": 0
+        },
+        "submitted_date": {
+          "type": "date",
+          "range_days": [
+            -60,
+            0
+          ]
+        }
+      }
+    },
+    "faculty": {
+      "description": "Teaching staff",
+      "id_prefix": "FAC",
+      "seed_count": 8,
+      "fields": {
+        "id": "string",
+        "full_name": "person",
+        "department": {
+          "type": "string",
+          "enum": [
+            "Mathematics",
+            "Science",
+            "English",
+            "History",
+            "Computing",
+            "Arts"
+          ]
+        },
+        "email": "email",
+        "title": {
+          "type": "string",
+          "enum": [
+            "Instructor",
+            "Assistant Professor",
+            "Professor"
+          ]
+        },
+        "hire_date": {
+          "type": "date",
+          "range_days": [
+            -4000,
+            -100
+          ]
+        },
+        "office": {
+          "type": "string",
+          "examples": [
+            "A-12",
+            "B-07",
+            "C-21",
+            "D-03"
+          ]
+        }
+      }
+    }
+  }
+}

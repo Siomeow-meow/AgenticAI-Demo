@@ -148,6 +148,61 @@ export const TOOL_EXAMPLES: Record<string, string> = {
   add_task: 'Add a task: send report, due 2026-10-20',
   list_tasks: 'What tasks do I have?',
   complete_task: 'Mark the send report task as done',
+  // Advanced maths
+  formula_eval: 'Evaluate 0.5*m*v^2 with m=10, v=3',
+  solve_equation: 'Solve x^3 - 2x - 5 = 0',
+  derivative: 'Derivative of x^3 + sin(x) at x = 2',
+  integral: 'Integral of x^2 from 0 to 3',
+  series_sum: 'Sum of k^2 for k from 1 to 10',
+  matrix_op: 'Determinant of the matrix 1,2;3,4',
+  // Research (RAG)
+  research_knowledge_base: 'Research carefully: what is the process to get a refund approved?',
+  deep_research: 'Deep research: how do ERP inventory methods relate to purchasing and reordering?',
+  search_everything: 'Search everything for "laptop"',
+  explore_graph: 'What is ERP connected to in the knowledge graph?',
+  // Memory & state
+  remember: 'Remember that my manager is Maria Santos',
+  recall: 'What do you remember about my manager?',
+  forget: 'Forget my manager',
+  summarize_text: 'Summarize: Our team met on Monday to review Q3 sales, which grew 12% over Q2 thanks to new retail accounts. Marketing proposed a November campaign, and finance flagged that shipping costs rose 8%. The group agreed to renegotiate freight contracts before the holiday rush and to revisit the campaign budget on Friday.',
+  // Workflow
+  assign_task: 'Assign Ben to prepare the Q4 budget by 2026-11-15',
+  schedule_reminder: 'Remind me in 10 minutes to stretch',
+  list_reminders: 'What reminders are waiting?',
+  // Communication
+  compose_email: 'Draft an email to ana@acme.com about moving Friday\'s meeting to 3pm',
+  compose_sms: 'Write a text to +639171234567 saying I will be 10 minutes late',
+  send_notification: 'Show a notification: Stand-up starts now',
+  post_webhook: 'Post "Deployment finished" to my Slack webhook',
+  // Files
+  write_file: 'Create a file called todo.md with a checklist for launching a website',
+  export_dataset: 'Export my imported table as CSV',
+  // Code
+  run_javascript: 'Run JavaScript: print the first 10 Fibonacci numbers',
+  // Vision
+  analyze_image: 'Read the text in my attached image',
+  // Internet (more)
+  fetch_url: 'Read https://example.com',
+  scrape_page: 'Get all the h1 headings from https://example.com',
+  http_request: 'GET https://api.github.com/zen',
+  // Agent tools
+  describe_tool: 'How does the loan_payment tool work?',
+  chain_tools: 'Calculate 1200*12 and then save the result to a file called total.txt',
+  // Marketing & sales
+  ad_metrics: 'Ad spend 5000, 400000 impressions, 8000 clicks, 240 sales, revenue 18000. What are my metrics?',
+  cac_ltv: 'CAC and LTV: spent 20000 to win 100 customers, 50 per month each, 70% margin, 4% monthly churn',
+  funnel_analysis: 'Funnel: Visitors:10000; Leads:800; Demos:200; Customers:40',
+  quota_attainment: 'Quota 500000, closed 320000, pipeline 400000, win rate 30%',
+  // Project management
+  earned_value: 'Budget 100000, should be 50% done, actually 40% done, spent 55000',
+  velocity_forecast: 'Velocities 21, 18, 24, 20 and 180 points left. How many sprints?',
+  risk_matrix: 'Rank risks: Vendor delay:4:3; Key person leaves:2:5; Scope creep:5:2',
+  project_timeline: 'Timeline from 2026-11-02: Design:5; Build:10; Test:4',
+  // Logistics & shipping
+  dim_weight: 'Billable weight of a 40x30x20 cm box weighing 3 kg',
+  container_load: 'How many 50x40x30 cm, 12 kg boxes fit in a 20ft container?',
+  delivery_eta: 'Ships 2026-11-02, 7 business days. When does it arrive?',
+  landed_cost: 'Landed cost: product 10000, freight 800, insurance 100, duty 10%, fees 300, 500 units',
   // Internet
   wikipedia: 'Wikipedia: enterprise resource planning',
   weather: 'What is the weather in Manila?',

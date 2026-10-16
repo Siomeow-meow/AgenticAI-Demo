@@ -3,19 +3,22 @@ import { readTable } from './csv'
 import type { Table } from './csv'
 import { addDataset, coreLabel, detectCore, importCoreTable } from './datasets'
 import type { SourceDoc } from './documents'
+import { storeImage } from './images'
 import { parseUpload } from './ingest'
 
 /** What the chat shows (and tells the model) about a file the user attached. */
 export interface Attachment {
   name: string
-  kind: 'table' | 'document' | 'error'
-  /** Dataset name or document id the assistant's tools can use. */
+  kind: 'table' | 'document' | 'image' | 'error'
+  /** Dataset name, document id or image id the assistant's tools can use. */
   ref: string
+  /** Images only: a preview address for the thumbnail. */
+  url?: string
   /** Short human-readable description (rows and columns, or word count, or the error). */
   detail: string
 }
 
-export const ATTACH_ACCEPT = '.csv,.tsv,.json,.xlsx,.xlsm,.pdf,.docx,.pptx,.txt,.md,.html,.htm,.log,.xml,.yaml,.yml,.sql'
+export const ATTACH_ACCEPT = '.csv,.tsv,.json,.xlsx,.xlsm,.pdf,.docx,.pptx,.txt,.md,.html,.htm,.log,.xml,.yaml,.yml,.sql,.png,.jpg,.jpeg,.webp,.gif'
 
 const MAX_BYTES = 25 * 1024 * 1024
 const TEXT_EXT = new Set(['txt', 'md', 'markdown', 'html', 'htm', 'log', 'xml', 'yaml', 'yml', 'sql', 'ini', 'cfg', 'js', 'ts', 'py', 'java', 'c', 'cpp', 'cs', 'rtf'])
@@ -139,7 +142,6 @@ export async function readFile(file: File): Promise<ReadResult> {
   if (TEXT_EXT.has(ext) || file.type.startsWith('text/')) {
     return { tables: [], docs: [parseUpload(file.name, await file.text())] }
   }
-  if (file.type.startsWith('image/')) throw new Error('Images are not supported: the local models here read text only.')
   throw new Error(`.${ext || 'unknown'} files are not supported. Try CSV, Excel, PDF, Word, PowerPoint, JSON or text.`)
 }
 
@@ -158,10 +160,18 @@ const wordCount = (s: string) => s.trim().split(/\s+/).filter(Boolean).length
  * text as knowledge documents) and describe each one for the chat.
  * `saveDocs` adds documents to the knowledge base.
  */
-export async function ingestFiles(files: File[], saveDocs: (docs: SourceDoc[]) => void): Promise<Attachment[]> {
+export async function ingestFiles(
+  files: File[],
+  saveDocs: (docs: SourceDoc[]) => void,
+): Promise<Attachment[]> {
   const out: Attachment[] = []
   for (const file of files) {
     try {
+      if (file.type.startsWith('image/')) {
+        const id = await storeImage(file)
+        out.push({ name: file.name, kind: 'image', ref: id, url: URL.createObjectURL(file), detail: 'image: read with the analyze_image tool (needs a vision model)' })
+        continue
+      }
       const { tables, docs } = await readFile(file)
       const tableDocs: SourceDoc[] = []
       for (const t of tables) {
@@ -197,5 +207,7 @@ export async function ingestFiles(files: File[], saveDocs: (docs: SourceDoc[]) =
 export function describeAttachments(list: Attachment[]): string {
   const ok = list.filter((a) => a.kind !== 'error')
   if (!ok.length) return ''
-  return `\n\n[Attached files: ${ok.map((a) => (a.kind === 'table' ? `table "${a.ref}" (${a.detail})` : `document "${a.ref}" (${a.detail})`)).join('; ')}]`
+  const label = (a: Attachment) =>
+    a.kind === 'table' ? `table "${a.ref}" (${a.detail})` : a.kind === 'image' ? `image "${a.ref}" (${a.name})` : `document "${a.ref}" (${a.detail})`
+  return `\n\n[Attached files: ${ok.map(label).join('; ')}]`
 }

@@ -46,7 +46,7 @@ export const workspaceTools: Tool[] = [
       const s = status.toLowerCase()
       const tasks = taskStore.get().filter((t) => s === 'all' || (s === 'done' ? t.done : !t.done))
       return tasks.length
-        ? tasks.map((t) => `${t.id} [${t.done ? 'x' : ' '}] ${t.title}${t.due ? ` (due ${t.due})` : ''}`).join('\n')
+        ? tasks.map((t) => `${t.id} [${t.done ? 'x' : ' '}] ${t.title}${t.assignee ? ` → ${t.assignee}` : ''}${t.due ? ` (due ${t.due})` : ''}`).join('\n')
         : 'No tasks found.'
     },
   },
