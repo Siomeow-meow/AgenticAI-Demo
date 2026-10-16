@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { OFFLINE, SUGGESTED_MODELS, unloadModel } from '../ai/llm'
+import { SUGGESTED_MODELS, unloadModel } from '../ai/llm'
 import { deleteModel, pullModel } from '../ai/ollama'
 import type { InstalledModel } from '../ai/ollama'
 import { describeProfile, profileFor } from '../ai/profile'
@@ -42,7 +42,8 @@ export function ModelsView({ installed, modelId, profileChoice, onProfileChoice,
     try {
       if (tag === modelId) {
         await unloadModel(tag)
-        onChoose(OFFLINE)
+        const next = list.filter((x) => x.name !== tag).sort((x, y) => Number(y.tools) - Number(x.tools) || y.sizeGB - x.sizeGB)[0]
+        if (next) onChoose(next.name)
       }
       await deleteModel(tag)
       setMessage({ ok: true, text: `Deleted ${tag}.` })
