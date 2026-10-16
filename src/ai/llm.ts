@@ -7,6 +7,7 @@ import type { ModelProfile, ProfileChoice } from './profile'
 import type { Source } from './rag'
 import { selectTools } from './router'
 import { createTools } from './tools'
+import { approxTokens, extractiveSummary, fitHistory } from './history'
 import { memoryPrompt } from './tools/memory'
 import type { ToolCall, ToolContext } from './tools'
 import type { AgentReply } from './agent'
@@ -89,24 +90,29 @@ function systemPrompt(docs: ToolContext['docs']) {
 - Maths: use calculator for expressions (it has sqrt, sin, log, factorials, pi...), and solve_equation, derivative, integral, series_sum and matrix_op for algebra and calculus. Never do arithmetic in your head.
 - Knowledge questions: search_knowledge_base first; if it finds nothing useful use research_knowledge_base (slower, checks relevance), deep_research for questions needing several facts, search_everything when you do not know where something is, and explore_graph for how topics relate.
 - Attached images (shown as image "img-1"): use analyze_image. To act on things, use the workflow, communication, file and code tools; remember and recall keep facts long-term. Emails and messages are only drafted: tell the user to open the link to send them.
+- When the user tells you a lasting fact (their name, role, team, preference or a decision), call remember with a short label. Use recall when they ask what you know about them. Tool results from earlier turns appear in brackets after the answer that used them: reuse those facts instead of asking again.
 - Greetings and general-knowledge questions can be answered directly without tools.`
 }
 
 let summary = { len: 0, first: '', text: '' }
 
-/** A short summary of the conversation older than the messages sent verbatim, so long chats do not lose their beginning. */
-async function earlierSummary(older: ChatMsg[]): Promise<string> {
-  if (!older.length) return ''
-  const first = older[0].content.slice(0, 80)
-  // Reuse the last summary until a few more messages have scrolled out of the window.
-  if (summary.first === first && older.length - summary.len < 4) return summary.text
-  const text = older.map((m) => `${m.role}: ${m.content.slice(0, 500)}`).join('\n').slice(-6000)
+/**
+ * A short summary of the conversation that no longer fits. Small models get an instant extract (an extra model call costs
+ * them many seconds on a CPU); larger models write a proper summary, refreshed every few messages.
+ */
+async function earlierSummary(dropped: ChatMsg[], useModel: boolean): Promise<string> {
+  if (!dropped.length) return ''
+  const instant = extractiveSummary(dropped)
+  if (!useModel) return instant
+  const first = dropped[0].content.slice(0, 80)
+  if (summary.first === first && dropped.length - summary.len < 4) return summary.text || instant
+  const text = dropped.map((m) => `${m.role}: ${m.content.slice(0, 500)}`).join('\n').slice(-6000)
   const written = await tryGenerate(
-    `Summarize this earlier part of a conversation in at most 5 short bullet points. Keep names, numbers, decisions and open questions.\n\n${text}`,
-    { maxTokens: 200 },
+    `Summarize this earlier part of a conversation in at most 6 short bullet points. Keep names, numbers, decisions, preferences and open questions.\n\n${text}`,
+    { maxTokens: 250 },
   )
-  summary = { len: older.length, first, text: written ?? summary.text }
-  return summary.text
+  summary = { len: dropped.length, first, text: written ?? '' }
+  return summary.text || instant
 }
 
 export function createLlmAgent(ctx: ToolContext) {
@@ -159,10 +165,14 @@ export function createLlmAgent(ctx: ToolContext) {
     }))
     const offered = offeredTools.map((t) => t.name)
 
-    const recent = history.slice(-profile.history)
-    const earlier = await earlierSummary(history.slice(0, -profile.history))
+    // Fit as much recent conversation as the context window allows after the fixed parts (instructions, tools, the question
+    // and room for the answer); whatever does not fit becomes a summary instead of being cut off silently.
+    const systemText = system + memoryPrompt()
+    const fixed = approxTokens(systemText) + approxTokens(JSON.stringify(schemas)) + approxTokens(question) + 1400 + 400
+    const { recent, dropped } = fitHistory(history.slice(-profile.history * 2), Math.max(500, profile.numCtx - fixed))
+    const earlier = await earlierSummary([...history.slice(0, -profile.history * 2), ...dropped], profile.tier !== 'small')
     const messages: Message[] = [
-      { role: 'system', content: system + memoryPrompt() },
+      { role: 'system', content: systemText },
       ...(earlier ? [{ role: 'system' as const, content: `Summary of the earlier conversation:\n${earlier}` }] : []),
       ...recent,
       { role: 'user', content: question },

@@ -15,7 +15,7 @@ export interface ModelProfile {
   tools: number
   /** Most model-and-tool rounds in one answer. */
   steps: number
-  /** How many earlier chat messages are sent word for word (older ones are summarized). */
+  /** Most earlier chat messages sent (fewer if they do not fit the context window; the rest are summarized). */
   history: number
   /** Passages returned by knowledge searches. */
   ragK: number
@@ -37,9 +37,9 @@ export interface ModelFacts {
 }
 
 const TIERS: Record<Tier, ModelProfile> = {
-  small: { tier: 'small', numCtx: 4096, tools: 3, steps: 5, history: 6, ragK: 3, resultChars: 3000, reasoning: 'off' },
-  medium: { tier: 'medium', numCtx: 8192, tools: 5, steps: 6, history: 8, ragK: 4, resultChars: 6000, reasoning: 'off' },
-  large: { tier: 'large', numCtx: 16384, tools: 8, steps: 10, history: 12, ragK: 5, resultChars: 12000, reasoning: 'auto' },
+  small: { tier: 'small', numCtx: 8192, tools: 3, steps: 5, history: 12, ragK: 3, resultChars: 3000, reasoning: 'off' },
+  medium: { tier: 'medium', numCtx: 16384, tools: 5, steps: 6, history: 16, ragK: 4, resultChars: 6000, reasoning: 'off' },
+  large: { tier: 'large', numCtx: 32768, tools: 8, steps: 10, history: 24, ragK: 5, resultChars: 12000, reasoning: 'auto' },
 }
 
 /** Parameter count in billions: from Ollama's number, else a guess from the download size (4-bit models are about 0.6 GB per billion). */
