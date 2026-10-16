@@ -6,7 +6,8 @@ import { describeAttachments, ingestFiles } from './ai/files'
 import { quickHelp, toolkitAnswer } from './ai/help'
 import type { Attachment } from './ai/files'
 import { learnedDoc } from './ai/ingest'
-import { createLlmAgent, DEFAULT_MODEL, OFFLINE, unloadModel } from './ai/llm'
+import { createLlmAgent, DEFAULT_MODEL, modelOption, OFFLINE, unloadModel } from './ai/llm'
+import type { ProfileChoice } from './ai/profile'
 import { buildSemantic, checkEmbedModel, EMBED_MODEL, listChatModels } from './ai/ollama'
 import type { InstalledModel } from './ai/ollama'
 import { buildIndex } from './ai/rag'
@@ -46,6 +47,7 @@ function App() {
   const [storedModelId, setModelId] = useLocalStorage<string>('acme-assistant-model', DEFAULT_MODEL)
   // The old "Hosted" model is gone; anyone who had it selected falls back to the default.
   const modelId = storedModelId === 'hosted' ? DEFAULT_MODEL : storedModelId
+  const [profileChoice, setProfileChoice] = useLocalStorage<ProfileChoice>('acme-assistant-profile', 'auto')
   const [embedReady, setEmbedReady] = useState(false)
   const [built, setBuilt] = useState<{ index: Index; semantic: Semantic } | null>(null)
   const [semanticError, setSemanticError] = useState<string | null>(null)
@@ -111,7 +113,7 @@ function App() {
   }, [semanticOn, embedReady, index])
 
   const found = Array.isArray(installed) ? installed.find((m) => m.name === modelId) : undefined
-  const model = found && { id: found.name, thinking: found.thinking, tools: found.tools }
+  const model = found && modelOption(found, profileChoice)
   const usingLlm = model !== undefined
   const busy = pending !== null
 
@@ -142,7 +144,7 @@ function App() {
         const list = await listChatModels()
         setInstalled(list)
         const f = list?.find((m) => m.name === modelId)
-        active = f && { id: f.name, thinking: f.thinking, tools: f.tools }
+        active = f && modelOption(f, profileChoice)
       }
       // The model is told which files were attached; the chat only shows the question and the file chips.
       const history = turns.flatMap((t) => [
@@ -292,7 +294,7 @@ function App() {
           />
         )}
         {view === 'models' && (
-          <ModelsView installed={installed} modelId={modelId} onChoose={chooseModel} onRefresh={() => listChatModels().then(setInstalled)} />
+          <ModelsView installed={installed} modelId={modelId} profileChoice={profileChoice} onProfileChoice={setProfileChoice} onChoose={chooseModel} onRefresh={() => listChatModels().then(setInstalled)} />
         )}
         {view === 'workspace' && <WorkspaceView />}
       </main>

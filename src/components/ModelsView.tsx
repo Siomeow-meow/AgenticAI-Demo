@@ -2,15 +2,19 @@ import { useState } from 'react'
 import { OFFLINE, SUGGESTED_MODELS, unloadModel } from '../ai/llm'
 import { deleteModel, pullModel } from '../ai/ollama'
 import type { InstalledModel } from '../ai/ollama'
+import { describeProfile, profileFor } from '../ai/profile'
+import type { ProfileChoice } from '../ai/profile'
 
 interface Props {
   installed: InstalledModel[] | null | 'checking'
   modelId: string
+  profileChoice: ProfileChoice
+  onProfileChoice: (choice: ProfileChoice) => void
   onChoose: (id: string) => void
   onRefresh: () => Promise<unknown>
 }
 
-export function ModelsView({ installed, modelId, onChoose, onRefresh }: Props) {
+export function ModelsView({ installed, modelId, profileChoice, onProfileChoice, onChoose, onRefresh }: Props) {
   const [name, setName] = useState('')
   const [pulling, setPulling] = useState<string | null>(null)
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
@@ -81,6 +85,22 @@ export function ModelsView({ installed, modelId, onChoose, onRefresh }: Props) {
       </section>
 
       <section className="group">
+        <h2>Performance profile</h2>
+        <p className="muted">
+          The assistant tunes itself to the model you pick: small models get a short context and few tools (faster, less confused), large models get a
+          long context, more tools, more steps and reasoning on hard questions. Leave this on Auto unless a model runs out of memory or you want to push it.
+        </p>
+        <div className="inline-form">
+          <select value={profileChoice} onChange={(e) => onProfileChoice(e.target.value as ProfileChoice)} aria-label="Performance profile">
+            <option value="auto">Auto (from the model's size)</option>
+            <option value="small">Small: 4k context, 3 tools</option>
+            <option value="medium">Medium: 8k context, 5 tools</option>
+            <option value="large">Large: 16k context, 8 tools, reasoning</option>
+          </select>
+        </div>
+      </section>
+
+      <section className="group">
         <h2>
           Installed <span className="count">{list.length}</span>
         </h2>
@@ -95,7 +115,9 @@ export function ModelsView({ installed, modelId, onChoose, onRefresh }: Props) {
               <p className="small">
                 {m.sizeGB.toFixed(1)} GB · {m.tools ? 'supports tools' : 'no tool support'}
                 {m.thinking ? ' · thinking model' : ''}
+                {m.paramsB ? ` · ${m.paramsB < 1 ? `${Math.round(m.paramsB * 1000)}M` : `${+m.paramsB.toFixed(1)}B`} parameters` : ''}
               </p>
+              <p className="small muted">Profile: {describeProfile(profileFor(m, profileChoice))}</p>
               <div className="card-actions">
                 {m.name !== modelId && (
                   <button type="button" className="btn small primary" onClick={() => onChoose(m.name)}>

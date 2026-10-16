@@ -43,8 +43,26 @@ export interface InstalledModel {
   sizeGB: number
   /** Supports tool calling. */
   tools: boolean
-  /** "Thinks" before answering (we turn that off to keep replies fast). */
+  /** "Thinks" before answering (the agent only lets large models do that, and only on hard questions). */
   thinking: boolean
+  /** Parameters in billions (for MoE models, the total), or null when Ollama did not report it. */
+  paramsB: number | null
+  /** Largest context the model supports, or null when unknown. */
+  contextLength: number | null
+}
+
+/** Ollama sends model_info as a plain object (its type says Map): read either. */
+function infoEntries(info: unknown): [string, unknown][] {
+  if (info instanceof Map) return [...info.entries()] as [string, unknown][]
+  return info && typeof info === 'object' ? Object.entries(info) : []
+}
+
+/** "7.6B" -> 7.6, "494.03M" -> 0.49, anything else -> null. */
+function billions(size: string | undefined): number | null {
+  const m = /([\d.]+)\s*([BMK])/i.exec(size ?? '')
+  if (!m) return null
+  const n = parseFloat(m[1])
+  return m[2].toUpperCase() === 'B' ? n : m[2].toUpperCase() === 'M' ? n / 1000 : n / 1e6
 }
 
 /** Chat models installed in Ollama (embedding models are left out), or null if Ollama is not reachable. */
@@ -54,21 +72,31 @@ export async function listChatModels(): Promise<InstalledModel[] | null> {
     const detailed = await Promise.all(
       models.map(async (m) => {
         let caps: string[] = []
+        let paramsB: number | null = null
+        let contextLength: number | null = null
         try {
-          caps = (await ollama.show({ model: m.name })).capabilities ?? []
+          const info = await ollama.show({ model: m.name })
+          caps = info.capabilities ?? []
+          const entries = infoEntries(info.model_info)
+          const count = entries.find(([k]) => k === 'general.parameter_count')?.[1]
+          paramsB = billions(info.details?.parameter_size) ?? (typeof count === 'number' ? count / 1e9 : null)
+          const ctx = entries.find(([k]) => k.endsWith('.context_length'))?.[1]
+          contextLength = typeof ctx === 'number' ? ctx : null
         } catch {
-          /* unknown capabilities: assume a plain chat model */
+          /* unknown details: assume a plain chat model of unknown size */
         }
-        return { m, caps }
+        return { m, caps, paramsB, contextLength }
       }),
     )
     return detailed
       .filter(({ caps }) => !(caps.includes('embedding') && !caps.includes('completion')))
-      .map(({ m, caps }) => ({
+      .map(({ m, caps, paramsB, contextLength }) => ({
         name: m.name,
         sizeGB: m.size / 1e9,
         tools: caps.includes('tools'),
         thinking: caps.includes('thinking'),
+        paramsB,
+        contextLength,
       }))
   } catch {
     return null

@@ -7,12 +7,14 @@ import { ollama } from './ollama'
 interface Active {
   id: string
   thinking: boolean
+  /** Context window for this model (from its profile). */
+  numCtx: number
 }
 
 let active: Active | null = null
 
 /** Runtime switches shared with tools (set by the chat agent for each question). */
-export const runtime = { network: false }
+export const runtime = { network: false, /** Passages knowledge searches return (from the model profile). */ ragK: 3 }
 
 export function setGenerateModel(model: Active | null) {
   active = model
@@ -46,7 +48,7 @@ export async function generate(prompt: string, opts: Options = {}): Promise<stri
     ...(opts.json ? { format: 'json' as const } : {}),
     ...(active?.thinking && !opts.model ? { think: false } : {}),
     keep_alive: '5m',
-    options: { num_ctx: 4096, temperature: 0.2, ...(opts.maxTokens ? { num_predict: opts.maxTokens } : {}) },
+    options: { num_ctx: active?.numCtx ?? 4096, temperature: 0.2, ...(opts.maxTokens ? { num_predict: opts.maxTokens } : {}) },
   })
   return res.message.content.trim()
 }

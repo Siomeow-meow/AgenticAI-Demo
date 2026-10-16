@@ -5,6 +5,7 @@ import type { SourceDoc } from '../ai/documents'
 import { ATTACH_ACCEPT } from '../ai/files'
 import type { Attachment } from '../ai/files'
 import { TOOL_EXAMPLES } from '../ai/tool-examples'
+import { Markdown } from './Markdown'
 import type { Tool, ToolCall } from '../ai/tools'
 
 export interface Turn {
@@ -264,7 +265,9 @@ function Message({
             </details>
           ))}
           {reply.text ? (
-            <div className={`answer${streaming ? ' streaming' : ''}`}>{reply.text}</div>
+            <div className={`answer${streaming ? ' streaming' : ''}`}>
+              <Markdown text={reply.text} />
+            </div>
           ) : (
             <div className="thinking">
               <span />
