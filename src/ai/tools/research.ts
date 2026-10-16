@@ -19,7 +19,7 @@ export function researchTools(ctx: ToolContext): Tool[] {
       keywords: 'research thorough careful accurate verify deep search hard question vague not found cannot find rephrase double check reliable',
       parameters: { query: { type: 'string', description: 'The question to research' } },
       run: async ({ query }) => {
-        const r = await advancedRetrieve(ctx, query, { k: 4, accurate: true, web: runtime.network })
+        const r = await advancedRetrieve(ctx, query, { k: runtime.ragK + 1, accurate: true, web: runtime.network })
         const head = `Steps: ${r.steps.join(' → ')}`
         if (r.web) return `${head}\n\nNo relevant document passages. From the web:\n${r.web}`
         return r.passages.length ? `${head}\n\n${formatPassages(r)}` : `${head}\n\nNo relevant information found.`
@@ -37,7 +37,7 @@ export function researchTools(ctx: ToolContext): Tool[] {
         const log: string[] = []
         let q = question
         for (let round = 1; round <= 3; round++) {
-          const r = await advancedRetrieve(ctx, q, { k: 3 })
+          const r = await advancedRetrieve(ctx, q, { k: runtime.ragK })
           const fresh = r.passages.filter((p) => !seen.has(p.id))
           for (const p of fresh) seen.set(p.id, p)
           log.push(`Round ${round}: searched "${short(q, 80)}" → ${fresh.length} new passage${fresh.length === 1 ? '' : 's'}`)

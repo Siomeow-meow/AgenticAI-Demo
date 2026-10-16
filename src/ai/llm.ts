@@ -1,6 +1,9 @@
 import type { Message, ToolCall as OllamaToolCall } from 'ollama/browser'
 import { runtime, setGenerateModel, tryGenerate } from './generate'
 import { ollama } from './ollama'
+import type { InstalledModel } from './ollama'
+import { isHardQuestion, profileFor } from './profile'
+import type { ModelProfile, ProfileChoice } from './profile'
 import type { Source } from './rag'
 import { selectTools } from './router'
 import { createTools } from './tools'
@@ -18,6 +21,13 @@ export interface ModelOption {
   thinking: boolean
   /** Models without tool support still chat, but cannot use the tools. */
   tools: boolean
+  /** How the agent is tuned for this model (context size, tools per question, steps, reasoning). */
+  profile: ModelProfile
+}
+
+/** Build the agent's settings for an installed model. */
+export function modelOption(m: InstalledModel, choice: ProfileChoice = 'auto'): ModelOption {
+  return { id: m.name, thinking: m.thinking, tools: m.tools, profile: profileFor(m, choice) }
 }
 
 /** Starting model; override with VITE_OLLAMA_MODEL in .env.local. Switch any time from the header. */
@@ -119,8 +129,10 @@ export function createLlmAgent(ctx: ToolContext) {
     model: ModelOption,
     attached: Attachment[] = [],
   ): Promise<AgentReply> {
-    setGenerateModel({ id: model.id, thinking: model.thinking })
+    const profile = model.profile
+    setGenerateModel({ id: model.id, thinking: model.thinking, numCtx: profile.numCtx })
     runtime.network = allowNetwork
+    runtime.ragK = profile.ragK
     // Files in the chat: always offer the tools that can read them.
     const forced = [
       'search_knowledge_base',
@@ -133,7 +145,7 @@ export function createLlmAgent(ctx: ToolContext) {
     // list cannot help, and offering them makes a small model search them anyway, so only Wikipedia is offered.
     const offeredTools = aboutOtherProduct(question)
       ? usable.filter((t) => t.name === 'wikipedia')
-      : selectTools(usable, question, 3, forced)
+      : selectTools(usable, question, profile.tools, forced)
     const schemas = offeredTools.map((t) => ({
       type: 'function' as const,
       function: {
@@ -150,8 +162,8 @@ export function createLlmAgent(ctx: ToolContext) {
     }))
     const offered = offeredTools.map((t) => t.name)
 
-    const recent = history.slice(-8)
-    const earlier = await earlierSummary(history.slice(0, -8))
+    const recent = history.slice(-profile.history)
+    const earlier = await earlierSummary(history.slice(0, -profile.history))
     const messages: Message[] = [
       { role: 'system', content: system + memoryPrompt() },
       ...(earlier ? [{ role: 'system' as const, content: `Summary of the earlier conversation:\n${earlier}` }] : []),
@@ -161,20 +173,23 @@ export function createLlmAgent(ctx: ToolContext) {
     const calls: ToolCall[] = []
     const sources = new Map<string, Source>()
 
-    for (let step = 0; step < 6; step++) {
+    // Thinking models only reason on hard questions, and only when the profile allows it (it makes answers slower).
+    const reason = model.thinking && profile.reasoning === 'auto' && isHardQuestion(question)
+    for (let step = 0; step < profile.steps; step++) {
       const stream = await ollama.chat({
         model: model.id,
         messages,
         ...(model.tools ? { tools: schemas } : {}),
         stream: true,
-        ...(model.thinking ? { think: false } : {}),
+        ...(model.thinking ? { think: reason } : {}),
         keep_alive: '5m', // unload the model from RAM after 5 idle minutes
-        options: { num_ctx: 4096 },
+        options: { num_ctx: profile.numCtx },
       })
 
       let content = ''
       const requested: OllamaToolCall[] = []
       for await (const part of stream) {
+        if (part.message.thinking && !content) onText('Thinking…')
         if (part.message.content) {
           content += part.message.content
           onText(content)
@@ -206,7 +221,7 @@ export function createLlmAgent(ctx: ToolContext) {
           const chunk = ctx.index.chunks.find((x) => x.id === m[1])
           if (chunk && !sources.has(chunk.id)) sources.set(chunk.id, { id: chunk.id, title: chunk.title, score: 1 })
         }
-        messages.push({ role: 'tool', tool_name: c.function.name, content: result })
+        messages.push({ role: 'tool', tool_name: c.function.name, content: result.slice(0, profile.resultChars) })
       }
     }
     return { text: 'Stopped after too many tool steps.', calls, sources: [...sources.values()], offered, model: model.id }

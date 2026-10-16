@@ -1,6 +1,6 @@
 import { advancedRetrieve } from '../rag-advanced'
 import type { Passage } from '../rag-advanced'
-import { tryGenerate } from '../generate'
+import { runtime, tryGenerate } from '../generate'
 import type { Hit } from '../rag'
 import type { Tool, ToolContext } from '../tool-types'
 import { searchAllData } from './fuzzy'
@@ -21,8 +21,8 @@ export async function smartRetrieve(
   const q = query?.trim() ? query : (document ?? '')
   const doc = clean(document)
   // Fast advanced retrieval: keyword + semantic + entity graph, reranked, with the text around each match.
-  let r = await advancedRetrieve(ctx, q, { k: 3, document: doc })
-  if (!r.hits.length && doc) r = await advancedRetrieve(ctx, q, { k: 3 })
+  let r = await advancedRetrieve(ctx, q, { k: runtime.ragK, document: doc })
+  if (!r.hits.length && doc) r = await advancedRetrieve(ctx, q, { k: runtime.ragK })
   return { hits: r.hits, passages: r.passages, q }
 }
 
