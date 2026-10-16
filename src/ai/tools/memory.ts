@@ -20,6 +20,46 @@ export function memoryPrompt(): string {
   return all.length ? `\n\nThings you were asked to remember about the user and their work (use them when relevant):\n${all.map((m) => `- ${m.key}: ${m.value}`).join('\n')}` : ''
 }
 
+const PROFILE_NOUNS =
+  'name|manager|boss|supervisor|team|department|company|role|job|title|position|email|phone|birthday|timezone|time zone|location|city|country|office|language|currency|project|client|school|university|course|major|colleague|assistant|partner|wife|husband|mother|father|brother|sister|friend'
+
+const titleCase = (s: string) => s.replace(/\b\w/g, (c) => c.toUpperCase())
+
+const QUESTION_START = /^(what|who|where|when|why|how|which|is|are|do|does|can|could|would|will)\b/i
+
+/**
+ * Pick up lasting facts the user states about themselves ("my manager is Maria", "I work in finance", "I prefer short answers")
+ * and remember them, without asking the model to. Only clear first-person statements count, never questions.
+ * Returns what was saved, so the app can tell the user.
+ */
+export function captureFacts(message: string): string[] {
+  const text = message.replace(/\s+/g, ' ').trim()
+  if (!text || text.length > 600) return []
+  const found: Memory[] = []
+  const add = (key: string, value: string) => {
+    const v = clean(value).replace(/[.!,;]+$/, '')
+    if (v.length >= 2) found.push({ key: key.toLowerCase(), value: v, savedAt: new Date().toLocaleString() })
+  }
+  const relation = new RegExp(`\\bmy (${PROFILE_NOUNS}) (?:is|are|was) ([^!?;]{2,80}?)(?=\\s+(?:and|but|so|because)\\s+(?:i|my|we|you)\\b|[!?;]|\\.(?:\\s|$)|$)`, 'i')
+
+  for (const sentence of text.split(/(?<=[.!])\s+/)) {
+    if (/\?\s*$/.test(sentence) || QUESTION_START.test(sentence)) continue
+    let m: RegExpExecArray | null
+    if ((m = /\b(?:my name is|call me|i am called)\s+([A-Za-z][\w'-]{1,24}(?:\s+[A-Z][\w'-]{1,24})?)/i.exec(sentence))) add('name', titleCase(m[1]))
+    if ((m = relation.exec(sentence))) add(m[1], m[2])
+    if ((m = /\bi (?:work|am working) (as|in|at|for) ([^.,!?]{2,50})/i.exec(sentence))) add('work', `${m[1]} ${m[2]}`)
+    if ((m = /\bi(?:'m| am) (?:a|an) ([^.,!?]{2,40})/i.exec(sentence)) && !/^(bit|little|lot|big|huge|beginner|newbie)\b/i.test(m[1])) add('role', m[1])
+    if ((m = /\b(?:i (?:prefer|always|never)|please always|please never|i want you to|don't ever|do not ever) ([^.!?]{3,90})/i.exec(sentence))) {
+      add(`preference: ${m[1].split(' ').slice(0, 3).join(' ')}`, sentence.replace(/^please\s+/i, ''))
+    }
+  }
+
+  if (!found.length) return []
+  const keys = new Set(found.map((f) => f.key))
+  memoryStore.set([...memoryStore.get().filter((x) => !keys.has(x.key)), ...found].slice(-60))
+  return found.map((f) => `${f.key} = ${f.value}`)
+}
+
 /** Pick the sentences that carry the most frequent content words (a no-model fallback). */
 function extractiveSummary(text: string, count: number): string {
   const sentences = text.replace(/\s+/g, ' ').match(/[^.!?]+[.!?]+/g) ?? [text]

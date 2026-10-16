@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { sampleDocs } from './ai/documents'
 import type { SourceDoc } from './ai/documents'
 import { describeAttachments, ingestFiles } from './ai/files'
+import { compactCalls } from './ai/history'
+import { captureFacts } from './ai/tools/memory'
 import { quickHelp, toolkitAnswer } from './ai/help'
 import type { Attachment } from './ai/files'
 import { learnedDoc } from './ai/ingest'
@@ -143,6 +145,11 @@ function App() {
     const q = question.trim()
     if (!q || busy) return
     setView('chat')
+    const learned = captureFacts(q)
+    if (learned.length) {
+      setNotice(`Remembered: ${learned.join('; ')}`)
+      setTimeout(() => setNotice(null), 5000)
+    }
     setPending({ question: q, text: '', attachments })
     try {
       // Right after the page opens the model list may still be loading: wait for it.
@@ -156,7 +163,7 @@ function App() {
       // The model is told which files were attached; the chat only shows the question and the file chips.
       const history = turns.flatMap((t) => [
         { role: 'user' as const, content: t.question + describeAttachments(t.attachments ?? []) },
-        { role: 'assistant' as const, content: t.reply.text },
+        { role: 'assistant' as const, content: t.reply.text + compactCalls(t.reply.calls) },
       ])
       const help = attachments.length ? null : (toolkitAnswer(q, allTools) ?? quickHelp(q))
       const reply = help
