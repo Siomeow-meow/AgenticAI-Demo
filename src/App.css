@@ -155,6 +155,8 @@
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--bg) 88%, transparent);
   backdrop-filter: blur(8px);
+  position: relative;
+  z-index: 40; /* keeps the model menu above the chat content */
 }
 
 .topbar h2 {
@@ -208,7 +210,7 @@
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  z-index: 30;
+  z-index: 50;
   width: min(340px, 88vw);
   max-height: 60vh;
   overflow-y: auto;
@@ -217,6 +219,17 @@
   border-radius: 16px;
   background: var(--panel);
   box-shadow: var(--shadow);
+}
+
+.model-menu.up {
+  top: auto;
+  bottom: calc(100% + 10px);
+}
+
+.composer-row .model-trigger {
+  padding: 4px 8px 4px 10px;
+  font-size: 12.5px;
+  background: var(--panel-2);
 }
 
 .menu-title {
@@ -625,7 +638,16 @@
 
 /* ---------- Composer ---------- */
 
+.file-thumb {
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
 .composer-wrap {
+  position: relative;
+  z-index: 20; /* keeps the model menu above the chat messages */
   width: min(780px, 100%);
   margin: 0 auto;
   padding: 6px 18px 14px;
@@ -692,11 +714,6 @@
   border-color: var(--accent-border);
 }
 
-.model-note {
-  font-size: 12px;
-  color: var(--muted);
-}
-
 .send {
   display: grid;
   place-items: center;
@@ -713,7 +730,9 @@
 }
 
 .send:disabled {
-  opacity: 0.35;
+  color: var(--muted);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
 }
 
 .fineprint {

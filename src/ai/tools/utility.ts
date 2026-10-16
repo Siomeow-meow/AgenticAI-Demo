@@ -1,59 +1,7 @@
 import type { Tool } from '../tool-types'
 
-// Safe arithmetic: recursive-descent parser, no eval.
-export function calculate(expr: string): number {
-  const s = expr.replace(/\s+/g, '').replace(/x/gi, '*').replace(/\^/g, '**')
-  let i = 0
-  const peek = () => s[i]
-  const isMul = () => peek() === '*' && s[i + 1] !== '*'
-
-  const number = (): number => {
-    const m = /^\d+(\.\d+)?/.exec(s.slice(i))
-    if (!m) throw new Error(`Unexpected "${peek() ?? 'end'}"`)
-    i += m[0].length
-    return parseFloat(m[0])
-  }
-  const factor = (): number => {
-    if (peek() === '-') {
-      i++
-      return -factor()
-    }
-    if (peek() === '(') {
-      i++
-      const v = sum()
-      if (peek() !== ')') throw new Error('Missing )')
-      i++
-      return v
-    }
-    return number()
-  }
-  const power = (): number => {
-    const base = factor()
-    if (s.startsWith('**', i)) {
-      i += 2
-      return base ** power()
-    }
-    return base
-  }
-  const product = (): number => {
-    let v = power()
-    while (isMul() || peek() === '/' || peek() === '%') {
-      const op = s[i++]
-      const r = power()
-      v = op === '*' ? v * r : op === '/' ? v / r : v % r
-    }
-    return v
-  }
-  const sum = (): number => {
-    let v = product()
-    while (peek() === '+' || peek() === '-') v = s[i++] === '+' ? v + product() : v - product()
-    return v
-  }
-
-  const result = sum()
-  if (i < s.length) throw new Error(`Unexpected "${s[i]}"`)
-  return result
-}
+export { calculate } from './mathexpr'
+import { calculate } from './mathexpr'
 
 // Units convert via a base unit per dimension (m, g, l, s); temperature is handled separately.
 const UNITS: Record<string, { dim: string; factor: number }> = {
@@ -125,10 +73,10 @@ export const utilityTools: Tool[] = [
   {
     name: 'calculator',
     category: 'Math & utility',
-    description: 'Evaluate an arithmetic expression, e.g. "12 * (3 + 4)". Use for any maths or percentages.',
-    keywords: 'math calculate compute plus minus times divide percent percentage sum total multiply',
+    description: 'Evaluate a maths expression with brackets, functions (sqrt, sin, log, factorial) and constants (pi, e). Use for any maths or percentages.',
+    keywords: 'math calculate compute plus minus times divide percent percentage sum total multiply sqrt square root sin cos tan log ln exp factorial power pi trigonometry logarithm exponent scientific',
     trigger: /\d\s*%|(?<![\d.])\d+\s*[-+*/^x×÷]\s*\d|percent/i,
-    parameters: { expr: { type: 'string', description: 'Arithmetic expression using + - * / % ^ and parentheses, e.g. 0.15*48000' } },
+    parameters: { expr: { type: 'string', description: 'Expression using + - * / % ^ ! parentheses, functions (sqrt, cbrt, abs, sin, cos, tan, asin, acos, atan, ln, log, log2, exp, floor, ceil, round, min, max, pow, ncr, npr, gamma) and constants (pi, e, tau, phi). Angles are in radians (use sind, cosd, tand for degrees). Example: 0.15*48000' } },
     match: (m) => {
       const expr = m.match(/[\d(][\d\s+\-*/%^().xX]*[\d)]/)?.[0]
       if (expr && /^\d+(-\d+){2,}$/.test(expr)) return null // "3-2-1" or "2026-10-15" is a name or a date, not subtraction

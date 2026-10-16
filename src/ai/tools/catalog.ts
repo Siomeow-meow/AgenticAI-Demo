@@ -19,6 +19,16 @@ const CATEGORY_WORDS: Record<string, string[]> = {
   'Your data': ['tables', 'datasets', 'spreadsheet', 'attached'],
   'Personal workspace': ['workspace', 'notes', 'tasks', 'tickets'],
   Internet: ['internet', 'online', 'web'],
+  'Memory & state': ['memory', 'remember'],
+  Communication: ['communication', 'email', 'messaging'],
+  Workflow: ['workflow', 'reminder', 'reminders'],
+  Code: ['code', 'programming', 'javascript'],
+  Files: ['files', 'file', 'export'],
+  Vision: ['vision', 'image', 'images'],
+  'Agent tools': ['agent'],
+  'Marketing & sales': ['marketing', 'sales', 'advertising'],
+  'Project management': ['project', 'projects', 'agile', 'scrum'],
+  'Logistics & shipping': ['logistics', 'shipping', 'freight', 'delivery'],
 }
 
 /** Categories a question refers to. IT only counts when written in capitals, because "it" is a common word. */

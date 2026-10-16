@@ -1,4 +1,3 @@
-import type { TraceEvent } from './hosted'
 import { retrieveHybrid, toSources } from './rag'
 import type { Source } from './rag'
 import { createTools } from './tools'
@@ -12,8 +11,6 @@ export interface AgentReply {
   offered?: string[]
   /** Ollama model that wrote the answer (absent for the basic rule-based agent). */
   model?: string
-  /** Hosted model only: every step of the agent's work, for the AI Trace panel. */
-  trace?: TraceEvent[]
 }
 
 /** Pick the sentences from a chunk that best overlap with the query. */

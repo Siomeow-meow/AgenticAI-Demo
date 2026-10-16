@@ -1,26 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
-import { HOSTED } from '../ai/hosted'
-import type { HostedStatus } from '../ai/hosted'
 import { OFFLINE } from '../ai/llm'
 import type { InstalledModel } from '../ai/ollama'
 
 interface Props {
   installed: InstalledModel[] | null | 'checking'
-  /** The local Python server for the hosted model, or null while checking. */
-  hosted: HostedStatus | null
   modelId: string
   dot: 'ok' | 'warn' | 'idle'
   disabled: boolean
   onChoose: (id: string) => void
   onManage: () => void
+  /** Which way the menu opens: below the button or above it (when the picker sits at the bottom of the page). */
+  placement?: 'down' | 'up'
 }
 
 /** A themed model dropdown (the browser's own <select> popup ignores dark mode). */
-export function ModelPicker({ installed, hosted, modelId, dot, disabled, onChoose, onManage }: Props) {
+export function ModelPicker({ installed, modelId, dot, disabled, onChoose, onManage, placement = 'down' }: Props) {
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   const list = Array.isArray(installed) ? installed : []
-  const known = modelId === OFFLINE || modelId === HOSTED || list.some((m) => m.name === modelId)
+  const known = modelId === OFFLINE || list.some((m) => m.name === modelId)
 
   // Close on outside click or Escape.
   useEffect(() => {
@@ -39,14 +37,7 @@ export function ModelPicker({ installed, hosted, modelId, dot, disabled, onChoos
     }
   }, [open])
 
-  const current = modelId === OFFLINE ? 'Basic (no AI model)' : modelId === HOSTED ? `Hosted · ${hosted?.model ?? 'API'}` : modelId
-  const hostedNote = !hosted
-    ? 'checking the local server…'
-    : !hosted.reachable
-      ? 'start the local server first (see README)'
-      : hosted.keySet
-        ? 'via the local server · tools · vision · RAG'
-        : 'server running - add LLM_API_KEY to server/.env'
+  const current = modelId === OFFLINE ? 'Basic (no AI model)' : modelId
   const choose = (id: string) => {
     setOpen(false)
     if (id !== modelId) onChoose(id)
@@ -71,16 +62,8 @@ export function ModelPicker({ installed, hosted, modelId, dot, disabled, onChoos
       </button>
 
       {open && (
-        <div className="model-menu" role="menu">
+        <div className={`model-menu ${placement}`} role="menu">
           <p className="menu-title">AI model</p>
-
-          <button type="button" role="menuitemradio" aria-checked={modelId === HOSTED} className={`model-item${modelId === HOSTED ? ' active' : ''}`} onClick={() => choose(HOSTED)}>
-            <span className="item-main">
-              <span className="item-name">Hosted · {hosted?.model ?? 'OpenAI-compatible API'}</span>
-              <span className="item-meta">{hostedNote}</span>
-            </span>
-            {modelId === HOSTED && <span className="check">✓</span>}
-          </button>
 
           {installed === 'checking' && <p className="menu-note">Checking Ollama…</p>}
           {installed === null && <p className="menu-note warn">Ollama is not running. Start it to use a model.</p>}

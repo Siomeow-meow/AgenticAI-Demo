@@ -1,4 +1,6 @@
-import { retrieveHybrid } from '../rag'
+import { advancedRetrieve } from '../rag-advanced'
+import type { Passage } from '../rag-advanced'
+import { tryGenerate } from '../generate'
 import type { Hit } from '../rag'
 import type { Tool, ToolContext } from '../tool-types'
 import { searchAllData } from './fuzzy'
@@ -15,12 +17,13 @@ export async function smartRetrieve(
   ctx: Pick<ToolContext, 'index' | 'semantic'>,
   query: string | undefined,
   document: string | undefined,
-): Promise<{ hits: Hit[]; q: string }> {
+): Promise<{ hits: Hit[]; passages: Passage[]; q: string }> {
   const q = query?.trim() ? query : (document ?? '')
   const doc = clean(document)
-  let hits = await retrieveHybrid(ctx.index, q, { semantic: ctx.semantic, document: doc })
-  if (!hits.length && doc) hits = await retrieveHybrid(ctx.index, q, { semantic: ctx.semantic })
-  return { hits, q }
+  // Fast advanced retrieval: keyword + semantic + entity graph, reranked, with the text around each match.
+  let r = await advancedRetrieve(ctx, q, { k: 3, document: doc })
+  if (!r.hits.length && doc) r = await advancedRetrieve(ctx, q, { k: 3 })
+  return { hits: r.hits, passages: r.passages, q }
 }
 
 export function knowledgeTools({ index, docs, semantic }: ToolContext): Tool[] {
@@ -37,15 +40,15 @@ export function knowledgeTools({ index, docs, semantic }: ToolContext): Tool[] {
       },
       match: (query) => ({ query }),
       run: async ({ query, document }) => {
-        const { hits, q } = await smartRetrieve({ index, semantic }, query, document)
-        if (!hits.length) {
+        const { passages, q } = await smartRetrieve({ index, semantic }, query, document)
+        if (!passages.length) {
           // Small models often reach for this tool first, so also look through the company data before giving up.
           const rows = searchAllData(q)
           return rows.length
             ? `No passages in the documents, but found in company data:\n${rows.join('\n')}`
             : 'No relevant passages or records found.'
         }
-        return hits.map((h) => `[${h.chunk.id}] ${h.chunk.text}`).join('\n---\n')
+        return passages.map((p) => `[${p.id}] ${p.text}`).join('\n---\n')
       },
     },
     {
@@ -66,13 +69,19 @@ export function knowledgeTools({ index, docs, semantic }: ToolContext): Tool[] {
     {
       name: 'summarize_document',
       category: 'Knowledge',
-      description: 'Get the key lines of a document (its first sentences and headings) for a quick overview.',
+      description: 'Summarize one document: an AI-written summary when a model is available, otherwise its key lines.',
       keywords: 'summarize summary overview outline gist tldr brief document key points',
       parameters: { id: { type: 'string', description: 'Document id or title' } },
-      run: ({ id = '' }) => {
+      run: async ({ id = '' }) => {
         const q = id.trim().toLowerCase()
         const doc = docs.find((d) => d.id.toLowerCase() === q || d.title.toLowerCase().includes(q))
         if (!doc) return `No document matches "${id}".`
+        const written = await tryGenerate(`Summarize this document in 4 to 6 short bullet points. Keep names, numbers and rules exactly.
+
+# ${doc.title}
+${doc.text.slice(0, 6000)}`, { maxTokens: 300 })
+        if (written) return `${doc.title}
+${written}`
         const firsts = doc.text
           .split(/\n\s*\n/)
           .map((p) => p.trim().match(/[^.!?]+[.!?]/)?.[0]?.trim())

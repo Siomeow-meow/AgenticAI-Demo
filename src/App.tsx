@@ -3,8 +3,6 @@ import { createAgent } from './ai/agent'
 import { sampleDocs } from './ai/documents'
 import type { SourceDoc } from './ai/documents'
 import { describeAttachments, ingestFiles } from './ai/files'
-import { createHostedAgent, HOSTED, hostedStatus, uploadImage } from './ai/hosted'
-import type { HostedStatus, TraceEvent } from './ai/hosted'
 import { quickHelp, toolkitAnswer } from './ai/help'
 import type { Attachment } from './ai/files'
 import { learnedDoc } from './ai/ingest'
@@ -19,22 +17,18 @@ import type { Turn } from './components/Chat'
 import { KnowledgeView } from './components/KnowledgeView'
 import { ModelPicker } from './components/ModelPicker'
 import { ModelsView } from './components/ModelsView'
-import { SchemasView } from './components/SchemasView'
-import { TracePanel } from './components/TracePanel'
 import { Toolkit } from './components/Toolkit'
 import { WorkspaceView } from './components/WorkspaceView'
 import { useLocalStorage } from './useLocalStorage'
 import './App.css'
-import './universal.css'
 
 type Theme = 'system' | 'light' | 'dark'
-type View = 'chat' | 'toolkit' | 'knowledge' | 'schemas' | 'models' | 'workspace'
+type View = 'chat' | 'toolkit' | 'knowledge' | 'models' | 'workspace'
 
 const VIEW_TITLES: Record<View, string> = {
   chat: 'Chat',
   toolkit: 'Toolkit',
   knowledge: 'Knowledge',
-  schemas: 'Schemas',
   models: 'Models',
   workspace: 'Workspace',
 }
@@ -49,15 +43,15 @@ function App() {
   const [turns, setTurns] = useLocalStorage<Turn[]>('acme-assistant-chat', [])
   const [internet, setInternet] = useLocalStorage<boolean>('acme-assistant-internet', false)
   const [semanticOn, setSemanticOn] = useLocalStorage<boolean>('acme-assistant-semantic', false)
-  const [modelId, setModelId] = useLocalStorage<string>('acme-assistant-model', DEFAULT_MODEL)
+  const [storedModelId, setModelId] = useLocalStorage<string>('acme-assistant-model', DEFAULT_MODEL)
+  // The old "Hosted" model is gone; anyone who had it selected falls back to the default.
+  const modelId = storedModelId === 'hosted' ? DEFAULT_MODEL : storedModelId
   const [embedReady, setEmbedReady] = useState(false)
   const [built, setBuilt] = useState<{ index: Index; semantic: Semantic } | null>(null)
   const [semanticError, setSemanticError] = useState<string | null>(null)
   const [pending, setPending] = useState<{ question: string; text: string; attachments: Attachment[] } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [installed, setInstalled] = useState<InstalledModel[] | null | 'checking'>('checking')
-  const [hosted, setHosted] = useState<HostedStatus | null>(null)
-  const [trace, setTrace] = useState<TraceEvent[]>([])
 
   const docs = useMemo(() => [...sampleDocs, ...uploaded], [uploaded])
   const index = useMemo(() => buildIndex(docs), [docs])
@@ -66,7 +60,6 @@ function App() {
   const offline = useMemo(() => createAgent(ctx), [ctx])
   const llm = useMemo(() => createLlmAgent(ctx), [ctx])
   const allTools = llm.tools
-  const hostedAgent = useMemo(() => createHostedAgent(allTools), [allTools])
 
   // Light / dark / follow-the-system: CSS reads the data-theme attribute on <html>.
   useEffect(() => {
@@ -83,14 +76,12 @@ function App() {
   useEffect(() => {
     listChatModels().then(setInstalled)
     checkEmbedModel().then(setEmbedReady)
-    hostedStatus().then(setHosted)
 
     // Models pulled or deleted in a terminal show up when you come back to this tab.
     const recheck = () => {
       if (document.visibilityState === 'visible') {
         listChatModels().then(setInstalled)
         checkEmbedModel().then(setEmbedReady)
-        hostedStatus().then(setHosted)
       }
     }
     document.addEventListener('visibilitychange', recheck)
@@ -121,20 +112,12 @@ function App() {
 
   const found = Array.isArray(installed) ? installed.find((m) => m.name === modelId) : undefined
   const model = found && { id: found.name, thinking: found.thinking, tools: found.tools }
-  // The hosted model needs the local Python server running and an API key in server/.env.
-  const usingHosted = modelId === HOSTED && hosted?.reachable === true && hosted.keySet === true
-  const usingLlm = model !== undefined || usingHosted
+  const usingLlm = model !== undefined
   const busy = pending !== null
 
   // Why the AI model is not being used (shown under the top bar), or null when it is.
   const llmStatus: string | null =
-    modelId === HOSTED
-      ? !hosted || usingHosted
-        ? null
-        : hosted.reachable
-          ? 'The local server has no API key. Add LLM_API_KEY to server/.env and restart it'
-          : 'The local server is not running. Start it with: cd server, then uvicorn backend.main:app --port 8000'
-      : installed === 'checking' || modelId === OFFLINE
+    installed === 'checking' || modelId === OFFLINE
       ? null
       : installed === null
         ? 'Ollama is not running at http://127.0.0.1:11434'
@@ -167,14 +150,8 @@ function App() {
         { role: 'assistant' as const, content: t.reply.text },
       ])
       const help = attachments.length ? null : (toolkitAnswer(q, allTools) ?? quickHelp(q))
-      if (attachments.some((a) => a.kind === 'image') && !usingHosted) {
-        setNotice('Images are only read by the Hosted model. Pick it in the model menu.')
-        setTimeout(() => setNotice(null), 8000)
-      }
       const reply = help
         ? { text: help, calls: [], sources: [] }
-        : usingHosted
-        ? await hostedAgent.respond(history, q + describeAttachments(attachments), (ev) => setTrace((t) => [...t, ev]), internet, attachments, hosted?.model)
         : active
         ? await llm.respond(history, q + describeAttachments(attachments), (text) => setPending({ question: q, text, attachments }), internet, active, attachments)
         : await offline.respond(q)
@@ -189,7 +166,7 @@ function App() {
 
   /** Read files, make tables available to the data tools and text to the knowledge search. */
   const attachFiles = (files: File[]) =>
-    ingestFiles(files, (docs) => setUploaded((u) => [...u.filter((d) => !docs.some((a) => a.id === d.id)), ...docs]), uploadImage)
+    ingestFiles(files, (docs) => setUploaded((u) => [...u.filter((d) => !docs.some((a) => a.id === d.id)), ...docs]))
 
   async function onUpload(files: File[]) {
     const result = await attachFiles(files)
@@ -222,13 +199,12 @@ function App() {
     { id: 'chat', label: 'Chat', icon: '💬' },
     { id: 'toolkit', label: 'Toolkit', icon: '🧰', count: allTools.length },
     { id: 'knowledge', label: 'Knowledge', icon: '📚', count: docs.length },
-    { id: 'schemas', label: 'Schemas', icon: '🗂️', count: hosted?.schemas },
     { id: 'models', label: 'Models', icon: '🧠' },
     { id: 'workspace', label: 'Workspace', icon: '✅' },
   ]
 
-  const dot = usingLlm ? 'ok' : (modelId === HOSTED ? !hosted : installed === 'checking') || modelId === OFFLINE ? 'idle' : 'warn'
-  const activeLabel = usingHosted ? `${hosted?.model} (hosted)` : model ? model.id : 'Basic mode'
+  const dot = usingLlm ? 'ok' : installed === 'checking' || modelId === OFFLINE ? 'idle' : 'warn'
+  const activeLabel = model ? model.id : 'Basic mode'
 
   return (
     <div className="shell">
@@ -243,7 +219,6 @@ function App() {
           disabled={busy}
           onClick={() => {
             setTurns([])
-            setTrace([])
             setView('chat')
           }}
         >
@@ -275,14 +250,12 @@ function App() {
                 </button>
               ))}
             </div>
-          <ModelPicker installed={installed} hosted={hosted} modelId={modelId} dot={dot} disabled={busy} onChoose={chooseModel} onManage={() => setView('models')} />
           </div>
         </header>
         {llmStatus && <p className="banner warn">{llmStatus} - using the basic rule-based agent.</p>}
         {notice && <p className="banner ok">{notice}</p>}
 
         {view === 'chat' && (
-          <div className="chat-with-trace">
           <Chat
             turns={turns}
             pending={pending}
@@ -294,10 +267,10 @@ function App() {
             learnables={learnables}
             savedIds={savedIds}
             onSave={(doc) => setUploaded((u) => [...u.filter((d) => d.id !== doc.id), doc])}
-            modelLabel={activeLabel}
+            modelPicker={
+              <ModelPicker placement="up" installed={installed} modelId={modelId} dot={dot} disabled={busy} onChoose={chooseModel} onManage={() => setView('models')} />
+            }
           />
-          {(modelId === HOSTED || trace.length > 0) && <TracePanel events={trace} onClear={() => setTrace([])} />}
-          </div>
         )}
         {view === 'toolkit' && <Toolkit tools={allTools} internet={internet} onInternet={setInternet} onTry={(p) => ask(p)} />}
         {view === 'knowledge' && (
@@ -318,7 +291,6 @@ function App() {
             }}
           />
         )}
-        {view === 'schemas' && <SchemasView onAsk={(p) => ask(p)} />}
         {view === 'models' && (
           <ModelsView installed={installed} modelId={modelId} onChoose={chooseModel} onRefresh={() => listChatModels().then(setInstalled)} />
         )}

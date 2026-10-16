@@ -3,15 +3,16 @@ import { readTable } from './csv'
 import type { Table } from './csv'
 import { addDataset, coreLabel, detectCore, importCoreTable } from './datasets'
 import type { SourceDoc } from './documents'
+import { storeImage } from './images'
 import { parseUpload } from './ingest'
 
 /** What the chat shows (and tells the model) about a file the user attached. */
 export interface Attachment {
   name: string
   kind: 'table' | 'document' | 'image' | 'error'
-  /** Dataset name, document id or uploaded image id the assistant's tools can use. */
+  /** Dataset name, document id or image id the assistant's tools can use. */
   ref: string
-  /** Images only: where the server serves the uploaded file (for the thumbnail). */
+  /** Images only: a preview address for the thumbnail. */
   url?: string
   /** Short human-readable description (rows and columns, or word count, or the error). */
   detail: string
@@ -162,16 +163,13 @@ const wordCount = (s: string) => s.trim().split(/\s+/).filter(Boolean).length
 export async function ingestFiles(
   files: File[],
   saveDocs: (docs: SourceDoc[]) => void,
-  uploadImage?: (file: File) => Promise<{ image_id: string; url: string }>,
 ): Promise<Attachment[]> {
   const out: Attachment[] = []
   for (const file of files) {
     try {
-      // Images go to the local server, where the hosted vision model can read them.
       if (file.type.startsWith('image/')) {
-        if (!uploadImage) throw new Error('Images need the Hosted model: the local Ollama models read text only.')
-        const { image_id, url } = await uploadImage(file)
-        out.push({ name: file.name, kind: 'image', ref: image_id, url, detail: 'image for the hosted vision model' })
+        const id = await storeImage(file)
+        out.push({ name: file.name, kind: 'image', ref: id, url: URL.createObjectURL(file), detail: 'image: read with the analyze_image tool (needs a vision model)' })
         continue
       }
       const { tables, docs } = await readFile(file)

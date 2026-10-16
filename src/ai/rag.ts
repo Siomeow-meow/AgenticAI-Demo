@@ -4,6 +4,10 @@ export interface Chunk {
   id: string
   docId: string
   title: string
+  /** Nearest heading above (or at the start of) the chunk, used as extra context when indexing. */
+  heading: string
+  /** Position of the chunk inside its document (0 is the first), so neighbours can be found. */
+  pos: number
   text: string
   vector: Map<string, number>
   norm: number
@@ -110,16 +114,28 @@ function weigh(tf: Map<string, number>, idf: Map<string, number>) {
   return { vector, norm: Math.sqrt(sum) }
 }
 
+const HEADING = /^#{1,6}\s+(.+)$/gm
+
 export function buildIndex(docs: SourceDoc[], maxWords = 120): Index {
-  const raw = docs.flatMap((d) =>
-    chunkText(d.text, maxWords).map((text, i) => ({
-      id: `${d.id}#${i + 1}`,
-      docId: d.id,
-      title: d.title,
-      text,
-      tf: termFreq(tokenize(`${d.title} ${text}`)),
-    })),
-  )
+  const raw = docs.flatMap((d) => {
+    let carried = ''
+    return chunkText(d.text, maxWords).map((text, i) => {
+      // Contextual retrieval: the nearest heading is indexed with the chunk, so a passage that never repeats the
+      // topic ("It must be approved within 5 days") still matches the topic of its section.
+      const headings = [...text.matchAll(HEADING)].map((m) => m[1].trim())
+      const heading = /^#{1,6}\s/.test(text) && headings.length ? headings[0] : carried
+      if (headings.length) carried = headings[headings.length - 1]
+      return {
+        id: `${d.id}#${i + 1}`,
+        docId: d.id,
+        title: d.title,
+        heading,
+        pos: i,
+        text,
+        tf: termFreq(tokenize(`${d.title} ${heading} ${text}`)),
+      }
+    })
+  })
 
   const df = new Map<string, number>()
   for (const r of raw) for (const t of r.tf.keys()) df.set(t, (df.get(t) ?? 0) + 1)

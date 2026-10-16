@@ -75,6 +75,28 @@ export async function listChatModels(): Promise<InstalledModel[] | null> {
   }
 }
 
+let visionCache: { at: number; model: string | null } | null = null
+
+/** An installed model that can read images (the first one Ollama reports with the "vision" capability), or null. */
+export async function findVisionModel(): Promise<string | null> {
+  if (visionCache && Date.now() - visionCache.at < 30_000) return visionCache.model
+  let found: string | null = null
+  try {
+    const { models } = await ollama.list()
+    for (const m of models) {
+      const caps = (await ollama.show({ model: m.name })).capabilities ?? []
+      if (caps.includes('vision')) {
+        found = m.name
+        break
+      }
+    }
+  } catch {
+    /* Ollama is not reachable */
+  }
+  visionCache = { at: Date.now(), model: found }
+  return found
+}
+
 /** Download a model, reporting progress as text and (when known) a percentage. */
 export async function pullModel(name: string, onProgress: (status: string, percent: number | null) => void) {
   const stream = await ollama.pull({ model: name, stream: true })
