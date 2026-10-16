@@ -98,6 +98,8 @@ export async function listChatModels(): Promise<InstalledModel[] | null> {
         paramsB,
         contextLength,
       }))
+      // Most capable first: models that can use tools, then the biggest, then by name.
+      .sort((a, b) => Number(b.tools) - Number(a.tools) || b.sizeGB - a.sizeGB || a.name.localeCompare(b.name))
   } catch {
     return null
   }
