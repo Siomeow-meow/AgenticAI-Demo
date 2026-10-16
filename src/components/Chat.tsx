@@ -23,6 +23,15 @@ const LESSON_PROMPTS = [
   'How should I write a good work email?',
 ]
 
+/** The three universal-layer scenarios (they need the Hosted model and the local server). */
+const UNIVERSAL_PROMPTS = [
+  'What systems and data do you have access to?',
+  "Show me all students with unpaid tuition and their parents' contact info",
+  "What's our data retention policy for customer records?",
+  'Which products are below their reorder point, and who supplies them?',
+  'Total POS sales by payment method in the last 7 days',
+]
+
 const CATEGORY_ORDER = [
   'Company data',
   'Your data',
@@ -119,7 +128,7 @@ export function Chat({ turns, pending, tools, internet, onInternet, onSend, onAt
         <div className="drop-overlay">
           <div>
             <strong>Drop files to attach</strong>
-            <span>CSV, Excel, PDF, Word, PowerPoint, JSON, text</span>
+            <span>CSV, Excel, PDF, Word, PowerPoint, JSON, text, images</span>
           </div>
         </div>
       )}
@@ -165,7 +174,7 @@ function Welcome({ tools, internet, onSend }: { tools: Tool[]; internet: boolean
       byCat.set(t.category, [...(byCat.get(t.category) ?? []), example])
     }
     const ordered = orderedCategories(byCat.keys()).map((c) => [c, byCat.get(c)!.slice(0, 6)] as const)
-    return [['Lessons & policies', LESSON_PROMPTS] as const, ...ordered]
+    return [['Lessons & policies', LESSON_PROMPTS] as const, ['Universal layer (Hosted)', UNIVERSAL_PROMPTS] as const, ...ordered]
   }, [tools])
 
   const [active, setActive] = useState('Lessons & policies')
@@ -177,7 +186,7 @@ function Welcome({ tools, internet, onSend }: { tools: Tool[]; internet: boolean
       <div className="hero-mark">✦</div>
       <h1>How can I help today?</h1>
       <p>Ask a question, run a calculation, learn something new, or attach a file and chat with your data.</p>
-      <div className="attach-hint">📎 Drop or attach CSV, Excel, PDF, Word, PowerPoint, JSON or text files, then ask about them.</div>
+      <div className="attach-hint">📎 Drop or attach CSV, Excel, PDF, Word, PowerPoint, JSON or text files, then ask about them. With the Hosted model, images (receipts, invoices, charts) work too.</div>
       <div className="tabs">
         {visible.map(([name]) => (
           <button key={name} type="button" className={name === current[0] ? 'on' : ''} onClick={() => setActive(name)}>
@@ -201,7 +210,11 @@ function AttachmentChips({ list, onRemove }: { list: Attachment[]; onRemove?: (i
     <div className="file-chips">
       {list.map((a, i) => (
         <span key={`${a.name}-${i}`} className={`file-chip ${a.kind}`} title={a.detail}>
-          <span className="file-icon">{a.kind === 'table' ? '▦' : a.kind === 'document' ? '📄' : '⚠'}</span>
+          {a.kind === 'image' && a.url ? (
+            <img className="file-thumb" src={a.url} alt="" />
+          ) : (
+            <span className="file-icon">{a.kind === 'table' ? '▦' : a.kind === 'document' ? '📄' : a.kind === 'image' ? '🖼' : '⚠'}</span>
+          )}
           <span className="file-name">{a.name}</span>
           <span className="file-detail">{a.kind === 'error' ? a.detail : a.detail.split(';')[0]}</span>
           {onRemove && (
@@ -384,7 +397,7 @@ function Composer({
           }}
         />
         <div className="composer-row">
-          <label className="chip attach" title="Attach files: CSV, Excel, PDF, Word, PowerPoint, JSON, text">
+          <label className="chip attach" title="Attach files: CSV, Excel, PDF, Word, PowerPoint, JSON, text, images (Hosted model)">
             📎 Attach
             <input type="file" multiple hidden accept={ATTACH_ACCEPT} onChange={pick} />
           </label>

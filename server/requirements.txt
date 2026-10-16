@@ -1,0 +1,15 @@
+# --- Web server ---
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9      # needed by FastAPI for file uploads
+
+# --- LLM client (any OpenAI-compatible endpoint: DashScope, OpenRouter, OpenAI, ...) ---
+openai>=1.40
+
+# --- RAG ---
+chromadb>=0.5                 # local persistent vector store
+sentence-transformers>=3.0    # CPU embeddings (pulls in CPU torch on Windows)
+pypdf>=4.0                    # PDF text extraction
+
+# --- Config ---
+python-dotenv>=1.0
