@@ -359,6 +359,20 @@
   overflow-y: auto;
 }
 
+.jump-latest {
+  position: sticky;
+  bottom: 12px;
+  display: block;
+  margin: 0 auto 12px;
+  padding: 6px 14px;
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text-h);
+  font-size: 13px;
+  box-shadow: var(--shadow);
+}
+
 .chat-col {
   width: min(780px, 100%);
   margin: 0 auto;

@@ -69,13 +69,31 @@ interface Props {
 
 export function Chat({ turns, pending, tools, internet, onInternet, onSend, onAttach, learnables, savedIds, onSave, modelPicker }: Props) {
   const endRef = useRef<HTMLDivElement>(null)
+  const scroller = useRef<HTMLDivElement>(null)
+  // Follow the reply as it is written, but only while the reader is at the bottom: scrolling up stops the following.
+  const follow = useRef(true)
+  const [awayFromBottom, setAwayFromBottom] = useState(false)
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [reading, setReading] = useState(false)
   const [dragging, setDragging] = useState(false)
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    if (follow.current) endRef.current?.scrollIntoView({ behavior: pending?.text ? 'auto' : 'smooth', block: 'end' })
   }, [turns, pending])
+
+  function onScroll() {
+    const el = scroller.current
+    if (!el) return
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+    follow.current = atBottom
+    setAwayFromBottom(!atBottom)
+  }
+
+  function jumpToLatest() {
+    follow.current = true
+    setAwayFromBottom(false)
+    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }
 
   async function attach(files: File[]) {
     if (!files.length) return
@@ -89,6 +107,7 @@ export function Chat({ turns, pending, tools, internet, onInternet, onSend, onAt
   }
 
   function send(question: string) {
+    follow.current = true // a new question always scrolls to the answer
     const usable = attachments.filter((a) => a.kind !== 'error')
     onSend(question || (usable.length ? DEFAULT_FILE_PROMPT : ''), usable)
     setAttachments([])
@@ -124,7 +143,7 @@ export function Chat({ turns, pending, tools, internet, onInternet, onSend, onAt
           </div>
         </div>
       )}
-      <div className="chat-scroll">
+      <div className="chat-scroll" ref={scroller} onScroll={onScroll}>
         <div className="chat-col">
           {empty && <Welcome tools={tools} internet={internet} onSend={(q) => send(q)} />}
           {turns.map((t, i) => (
@@ -141,6 +160,11 @@ export function Chat({ turns, pending, tools, internet, onInternet, onSend, onAt
           )}
           <div ref={endRef} />
         </div>
+        {pending && awayFromBottom && (
+          <button type="button" className="jump-latest" onClick={jumpToLatest}>
+            ↓ Jump to latest
+          </button>
+        )}
       </div>
       <Composer
         busy={pending !== null}
