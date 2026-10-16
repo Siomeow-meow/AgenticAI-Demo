@@ -162,27 +162,154 @@
 }
 
 .model-pick {
+  position: relative;
+}
+
+.model-trigger {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 10px 5px 12px;
+  max-width: min(320px, 46vw);
+  padding: 6px 10px 6px 12px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--panel);
-}
-
-.model-pick select {
-  border: 0;
-  background: transparent;
-  font-size: 13px;
   color: var(--text-h);
-  max-width: 280px;
-  outline: none;
-  cursor: pointer;
+  font-size: 13px;
+  transition: border-color 0.12s;
 }
 
-.model-pick select option {
-  color: initial;
+.model-trigger:hover:not(:disabled),
+.model-trigger[aria-expanded='true'] {
+  border-color: var(--accent-border);
+}
+
+.model-trigger:disabled {
+  opacity: 0.6;
+}
+
+.model-current {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chevron {
+  flex: none;
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+
+.chevron.up {
+  transform: rotate(180deg);
+}
+
+.model-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  width: min(340px, 88vw);
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.menu-title {
+  padding: 6px 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.menu-note {
+  padding: 6px 10px 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.menu-note.warn {
+  color: var(--warn);
+}
+
+.model-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 10px;
+  text-align: left;
+  color: var(--text);
+  transition: background 0.1s;
+}
+
+.model-item:hover,
+.model-item:focus-visible {
+  background: var(--panel-2);
+  outline: none;
+}
+
+.model-item.active {
+  background: var(--accent-bg);
+}
+
+.model-item.missing {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-h);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.item-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.check {
+  flex: none;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.menu-manage {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 9px 10px;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 10px 10px;
+  font-size: 12.5px;
+  text-align: left;
+  color: var(--accent);
+}
+
+.menu-manage:hover {
+  background: var(--panel-2);
 }
 
 .banner {

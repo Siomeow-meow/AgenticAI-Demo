@@ -165,7 +165,22 @@ function cosine(a: number[], b: number[]): number {
   return na && nb ? dot / Math.sqrt(na * nb) : 0
 }
 
+/**
+ * How much of the question the chunk covers: the share of the question's words (weighted by how rare
+ * they are) that appear in the chunk. Words the documents never use count in full, so a question about
+ * something the knowledge base does not know (e.g. another company's product) scores low.
+ */
+export function coverage(index: Index, query: string, chunk: Chunk): number {
+  const words = [...new Set(tokenize(query))]
+  if (!words.length) return 0
+  const unknown = Math.log(1 + index.chunks.length)
+  const weight = (w: string) => index.idf.get(w) ?? unknown
+  const total = words.reduce((a, w) => a + weight(w), 0)
+  return words.filter((w) => chunk.vector.has(w)).reduce((a, w) => a + weight(w), 0) / total
+}
+
 export interface RetrieveOptions {
+  minScore?: number
   k?: number
   semantic?: Semantic | null
   /** Only search chunks of the document whose id or title contains this text. */
@@ -186,7 +201,10 @@ export async function retrieveHybrid(index: Index, query: string, opts: Retrieve
   const lexical = retrieve(pool, query, pool.chunks.length, 0)
   const lexicalScore = new Map(lexical.map((h) => [h.chunk.id, h.score]))
   const best = lexical[0]?.score ?? 0
-  const keywordOnly = () => lexical.filter((h) => h.score >= 0.05 && h.score >= best * 0.4).slice(0, k)
+  // Keep only matches that are strong, close to the best one, and cover enough of what was asked.
+  const floor = opts.minScore ?? 0.1
+  const keywordOnly = () =>
+    lexical.filter((h) => h.score >= floor && h.score >= best * 0.4 && coverage(index, query, h.chunk) >= 0.35).slice(0, k)
   if (!semantic) return keywordOnly()
 
   let qv: number[]

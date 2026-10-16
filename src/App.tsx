@@ -15,6 +15,7 @@ import type { ToolCall } from './ai/tools'
 import { Chat } from './components/Chat'
 import type { Turn } from './components/Chat'
 import { KnowledgeView } from './components/KnowledgeView'
+import { ModelPicker } from './components/ModelPicker'
 import { ModelsView } from './components/ModelsView'
 import { Toolkit } from './components/Toolkit'
 import { WorkspaceView } from './components/WorkspaceView'
@@ -133,6 +134,14 @@ function App() {
     setView('chat')
     setPending({ question: q, text: '', attachments })
     try {
+      // Right after the page opens the model list may still be loading: wait for it rather than silently using the basic agent.
+      let active = model
+      if (installed === 'checking') {
+        const list = await listChatModels()
+        setInstalled(list)
+        const f = list?.find((m) => m.name === modelId)
+        active = f && { id: f.name, thinking: f.thinking, tools: f.tools }
+      }
       // The model is told which files were attached; the chat only shows the question and the file chips.
       const history = turns.flatMap((t) => [
         { role: 'user' as const, content: t.question + describeAttachments(t.attachments ?? []) },
@@ -141,8 +150,8 @@ function App() {
       const help = attachments.length ? null : (toolkitAnswer(q, allTools) ?? quickHelp(q))
       const reply = help
         ? { text: help, calls: [], sources: [] }
-        : usingLlm
-        ? await llm.respond(history, q + describeAttachments(attachments), (text) => setPending({ question: q, text, attachments }), internet, model, attachments)
+        : active
+        ? await llm.respond(history, q + describeAttachments(attachments), (text) => setPending({ question: q, text, attachments }), internet, active, attachments)
         : await offline.respond(q)
       setTurns((t) => [...t, { question: q, reply, attachments }])
     } catch (e) {
@@ -238,19 +247,7 @@ function App() {
                 </button>
               ))}
             </div>
-          <label className="model-pick" title="Choose which AI model answers">
-            <span className={`dot ${dot}`} />
-            <select value={modelId} disabled={busy} onChange={(e) => chooseModel(e.target.value)}>
-              {Array.isArray(installed) &&
-                installed.map((m) => (
-                  <option key={m.name} value={m.name}>
-                    {m.name} ({m.sizeGB.toFixed(1)} GB{m.tools ? '' : ', no tools'})
-                  </option>
-                ))}
-              {modelId !== OFFLINE && !found && <option value={modelId}>{installed === 'checking' ? modelId : `${modelId} (not installed)`}</option>}
-              <option value={OFFLINE}>Basic (no AI model)</option>
-            </select>
-          </label>
+          <ModelPicker installed={installed} modelId={modelId} dot={dot} disabled={busy} onChoose={chooseModel} onManage={() => setView('models')} />
           </div>
         </header>
         {llmStatus && <p className="banner warn">{llmStatus} - using the basic rule-based agent.</p>}

@@ -131,6 +131,7 @@ export const utilityTools: Tool[] = [
     parameters: { expr: { type: 'string', description: 'Arithmetic expression using + - * / % ^ and parentheses, e.g. 0.15*48000' } },
     match: (m) => {
       const expr = m.match(/[\d(][\d\s+\-*/%^().xX]*[\d)]/)?.[0]
+      if (expr && /^\d+(-\d+){2,}$/.test(expr)) return null // "3-2-1" or "2026-10-15" is a name or a date, not subtraction
       return expr && /[+\-*/%^xX]/.test(expr) ? { expr } : null
     },
     run: ({ expr }) => {

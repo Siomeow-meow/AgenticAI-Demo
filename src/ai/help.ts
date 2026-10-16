@@ -4,14 +4,29 @@ import type { Tool } from './tool-types'
 const TOOL_WORDS = /\b(tools?|tool ?kits?|tool ?sets?|capabilit(?:y|ies)|abilit(?:y|ies)|functions|features|commands)\b/
 const LIST_WORDS = /\b(list|show|what|which|all|every|give|tell|enumerate|display|available|have|got|offer|include|name)\b/
 
+// The question must be about THIS assistant. "How many toolsets does Claude have?" is about someone else
+// and must go to the model, not be answered with our own tool list.
+const SELF = /\b(you|your|yours|yourself|assistant|acme)\b|\b(can|could|does|do|will|would) it\b/
+const OTHER = /\b(claude|chatgpt|gpt-?\d*|openai|anthropic|gemini|bard|copilot|llama|mistral|deepseek|grok|perplexity|alexa|siri|cursor|codex|langchain|ollama|qwen)\b/
+/** True for questions about other products or companies ("How many tools does Claude have?"), not about this assistant. */
+export function aboutOtherProduct(question: string): boolean {
+  const q = question.toLowerCase()
+  return OTHER.test(q) && !SELF.test(q)
+}
+
+/** A command such as "list all toolkits", "show tools", "list the IT tools". */
+const COMMAND = /^\s*(please\s+)?(list|show|display|give me|enumerate)\b[^?]*\b(tools?|tool ?kits?|tool ?sets?)\b/
+
 /** Instant, complete answer to "what tools / toolkits do you have?" (optionally for one category), straight from the registry. */
 export function toolkitAnswer(question: string, tools: Tool[]): string | null {
   const q = question.toLowerCase()
   const asksWhatYouCanDo = /\bwhat (can|do) you (do|offer|have)\b|\bwhat are you able to\b|\byour (skills|abilities|capabilities)\b/.test(q)
   if (q.includes('[attached files')) return null
-  if (!asksWhatYouCanDo && !(TOOL_WORDS.test(q) && LIST_WORDS.test(q))) return null
   const cats = [...new Set(tools.map((t) => t.category))]
   const mentioned = categoriesIn(question, cats)
+  const about = SELF.test(q) || COMMAND.test(q) || (mentioned.length > 0 && /\bavailable\b/.test(q))
+  if (OTHER.test(q) && !SELF.test(q)) return null
+  if (!asksWhatYouCanDo && !(about && TOOL_WORDS.test(q) && LIST_WORDS.test(q))) return null
   return listTools(tools, { categories: mentioned })
 }
 
