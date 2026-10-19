@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { sampleDocs } from './ai/documents'
 import type { SourceDoc } from './ai/documents'
 import { describeAttachments, ingestFiles } from './ai/files'
 import { compactCalls } from './ai/history'
 import { captureFacts } from './ai/tools/memory'
+import { approvals } from './ai/approval'
+import type { ApprovalAnswer, ApprovalRequest } from './ai/approval'
+import { prepareModel } from './ai/prepare'
 import { quickHelp, toolkitAnswer } from './ai/help'
 import type { Attachment } from './ai/files'
 import { learnedDoc } from './ai/ingest'
@@ -14,24 +17,28 @@ import type { InstalledModel } from './ai/ollama'
 import { buildIndex } from './ai/rag'
 import type { Index, Semantic } from './ai/rag'
 import type { ToolCall } from './ai/tools'
+import { ApprovalDialog } from './components/ApprovalDialog'
 import { Chat } from './components/Chat'
-import type { Turn } from './components/Chat'
+import type { Pending, Turn } from './components/Chat'
+import { EvalView } from './components/EvalView'
 import { KnowledgeView } from './components/KnowledgeView'
 import { ModelPicker } from './components/ModelPicker'
 import { ModelsView } from './components/ModelsView'
 import { Toolkit } from './components/Toolkit'
 import { WorkspaceView } from './components/WorkspaceView'
+import { useConversations, toMarkdown } from './useConversations'
 import { useLocalStorage } from './useLocalStorage'
 import './App.css'
 
 type Theme = 'system' | 'light' | 'dark'
-type View = 'chat' | 'toolkit' | 'knowledge' | 'models' | 'workspace'
+type View = 'chat' | 'toolkit' | 'knowledge' | 'models' | 'evaluate' | 'workspace'
 
 const VIEW_TITLES: Record<View, string> = {
   chat: 'Chat',
   toolkit: 'Toolkit',
   knowledge: 'Knowledge',
   models: 'Models',
+  evaluate: 'Evaluate',
   workspace: 'Workspace',
 }
 
@@ -42,7 +49,8 @@ function App() {
     return hash in VIEW_TITLES ? (hash as View) : 'chat'
   })
   const [uploaded, setUploaded] = useLocalStorage<SourceDoc[]>('acme-assistant-uploads', [])
-  const [turns, setTurns] = useLocalStorage<Turn[]>('acme-assistant-chat', [])
+  const { turns, active: activeChat, items: chats, setTurns, newChat, select: selectChat, remove: removeChat, rename: renameChat } = useConversations()
+  const [chatFilter, setChatFilter] = useState('')
   const [internet, setInternet] = useLocalStorage<boolean>('acme-assistant-internet', false)
   const [semanticOn, setSemanticOn] = useLocalStorage<boolean>('acme-assistant-semantic', false)
   const [storedModelId, setModelId] = useLocalStorage<string>('acme-assistant-model', DEFAULT_MODEL)
@@ -50,7 +58,9 @@ function App() {
   const [embedReady, setEmbedReady] = useState(false)
   const [built, setBuilt] = useState<{ index: Index; semantic: Semantic } | null>(null)
   const [semanticError, setSemanticError] = useState<string | null>(null)
-  const [pending, setPending] = useState<{ question: string; text: string; attachments: Attachment[] } | null>(null)
+  const [pending, setPending] = useState<Pending | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
+  const [approval, setApproval] = useState<{ request: ApprovalRequest; resolve: (a: ApprovalAnswer) => void } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [installed, setInstalled] = useState<InstalledModel[] | null | 'checking'>('checking')
 
@@ -69,6 +79,21 @@ function App() {
   const ctx = useMemo(() => ({ index, docs, semantic }), [index, docs, semantic])
   const llm = useMemo(() => createLlmAgent(ctx), [ctx])
   const allTools = llm.tools
+
+  // Actions that change something outside the chat (writing files, posting to a webhook) ask first, through a dialog.
+  useEffect(() => {
+    approvals.ask = (request) => new Promise<ApprovalAnswer>((resolve) => setApproval({ request, resolve }))
+    return () => {
+      approvals.ask = null
+    }
+  }, [])
+  const answerApproval = useCallback(
+    (answer: ApprovalAnswer) => {
+      approval?.resolve(answer)
+      setApproval(null)
+    },
+    [approval],
+  )
 
   // Light / dark / follow-the-system: CSS reads the data-theme attribute on <html>.
   useEffect(() => {
@@ -141,7 +166,11 @@ function App() {
     setModelId(next)
   }
 
-  async function ask(question: string, attachments: Attachment[] = []) {
+  /**
+   * Ask a question. `base` is the conversation to continue from (the current one, or a shortened copy when
+   * regenerating or editing); the new turn is added after it.
+   */
+  async function ask(question: string, attachments: Attachment[] = [], base: Turn[] = turns) {
     const q = question.trim()
     if (!q || busy) return
     setView('chat')
@@ -150,6 +179,10 @@ function App() {
       setNotice(`Remembered: ${learned.join('; ')}`)
       setTimeout(() => setNotice(null), 5000)
     }
+    const controller = new AbortController()
+    abortRef.current = controller
+    const show = (text: string) => setPending((p) => ({ question: q, attachments, status: p?.status, text }))
+    const status = (s: string) => setPending((p) => (p ? { ...p, status: s } : p))
     setPending({ question: q, text: '', attachments })
     try {
       // Right after the page opens the model list may still be loading: wait for it.
@@ -160,25 +193,85 @@ function App() {
         const f = list?.find((m) => m.name === modelId) ?? [...(list ?? [])].sort((x, y) => Number(y.tools) - Number(x.tools) || y.sizeGB - x.sizeGB)[0]
         active = f && modelOption(f, profileChoice)
       }
+      // First use of this model: check it fits in GPU memory and lower the context window if it does not (once per model).
+      if (active) {
+        const prepared = await prepareModel(active, status)
+        active = prepared.model
+        if (prepared.lowered) {
+          setNotice(`Context lowered to ${active.profile.numCtx.toLocaleString('en-US')} tokens so ${active.id} stays on the GPU (faster).`)
+          setTimeout(() => setNotice(null), 8000)
+        }
+      }
       // The model is told which files were attached; the chat only shows the question and the file chips.
-      const history = turns.flatMap((t) => [
+      const history = base.flatMap((t) => [
         { role: 'user' as const, content: t.question + describeAttachments(t.attachments ?? []) },
-        { role: 'assistant' as const, content: t.reply.text + compactCalls(t.reply.calls) },
+        { role: 'assistant' as const, content: t.reply.text, facts: compactCalls(t.reply.calls) },
       ])
       const help = attachments.length ? null : (toolkitAnswer(q, allTools) ?? quickHelp(q))
       const reply = help
         ? { text: help, calls: [], sources: [] }
         : active
-        ? await llm.respond(history, q + describeAttachments(attachments), (text) => setPending({ question: q, text, attachments }), internet, active, attachments)
+        ? await llm.respond(history, q + describeAttachments(attachments), show, internet, active, attachments, { signal: controller.signal, onStatus: status })
         : { text: `${llmStatus ?? 'No AI model is available.'}. Pick a model in the message box, or open the Models tab.`, calls: [], sources: [] }
-      setTurns((t) => [...t, { question: q, reply, attachments }])
+      setTurns([...base, { question: q, reply, attachments }])
     } catch (e) {
-      const text = `Error: ${(e as Error).message}`
-      setTurns((t) => [...t, { question: q, reply: { text, calls: [], sources: [] }, attachments }])
+      const text = controller.signal.aborted ? '' : `Error: ${(e as Error).message}`
+      setTurns([...base, { question: q, reply: { text, calls: [], sources: [], ...(controller.signal.aborted ? { stopped: true } : {}) }, attachments }])
     } finally {
       setPending(null)
+      abortRef.current = null
     }
   }
+
+  /** The Stop button: stop the reply (and refuse any action it was waiting to be approved). */
+  function stop() {
+    abortRef.current?.abort()
+    if (approval) {
+      approval.resolve('deny')
+      setApproval(null)
+    }
+  }
+
+  /** Ask the last question again, replacing its answer. */
+  function regenerate() {
+    if (busy || !turns.length) return
+    const last = turns[turns.length - 1]
+    const base = turns.slice(0, -1)
+    setTurns(base)
+    void ask(last.question, last.attachments ?? [], base)
+  }
+
+  /** Remove a question and everything after it; the chat box already holds its text again. */
+  function editFrom(index: number) {
+    if (busy) return
+    setTurns(turns.slice(0, index))
+  }
+
+  /** One question for the Evaluate tab: no chat history, nothing saved. */
+  async function runEval(question: string, signal: AbortSignal) {
+    if (!model) throw new Error('No AI model is available.')
+    const { model: prepared } = await prepareModel(model)
+    return llm.respond([], question, () => {}, false, prepared, [], { signal })
+  }
+
+  function exportChat() {
+    const url = URL.createObjectURL(new Blob([toMarkdown(activeChat)], { type: 'text/markdown;charset=utf-8' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${activeChat.title.replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50) || 'chat'}.md`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 4000)
+  }
+
+  const shownChats = useMemo(() => {
+    const f = chatFilter.trim().toLowerCase()
+    return [...chats]
+      .filter((c) => c.turns.length > 0 || c.id === activeChat.id)
+      .filter((c) => !f || c.title.toLowerCase().includes(f) || c.turns.some((t) => t.question.toLowerCase().includes(f) || t.reply.text.toLowerCase().includes(f)))
+      .sort((x, y) => y.updatedAt - x.updatedAt)
+  }, [chats, chatFilter, activeChat.id])
 
   /** Read files, make tables available to the data tools and text to the knowledge search. */
   const attachFiles = (files: File[]) =>
@@ -216,6 +309,7 @@ function App() {
     { id: 'toolkit', label: 'Toolkit', icon: '🧰', count: allTools.length },
     { id: 'knowledge', label: 'Knowledge', icon: '📚', count: docs.length },
     { id: 'models', label: 'Models', icon: '🧠' },
+    { id: 'evaluate', label: 'Evaluate', icon: '🧪' },
     { id: 'workspace', label: 'Workspace', icon: '✅' },
   ]
 
@@ -234,12 +328,64 @@ function App() {
           className="new-chat"
           disabled={busy}
           onClick={() => {
-            setTurns([])
+            newChat()
             setView('chat')
           }}
         >
           <span>＋</span> New chat
         </button>
+        {shownChats.length > 0 && (
+          <div className="chat-list" aria-label="Your chats">
+            {chats.filter((c) => c.turns.length > 0).length > 5 && (
+              <input className="chat-search" value={chatFilter} onChange={(e) => setChatFilter(e.target.value)} placeholder="Search chats…" aria-label="Search chats" />
+            )}
+            {shownChats.map((c) => (
+              <div key={c.id} className={`chat-item${c.id === activeChat.id ? ' active' : ''}`}>
+                <button
+                  type="button"
+                  className="chat-open"
+                  disabled={busy}
+                  title={c.title}
+                  onClick={() => {
+                    selectChat(c.id)
+                    setView('chat')
+                  }}
+                >
+                  {c.title}
+                </button>
+                {c.turns.length > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      className="chat-act"
+                      disabled={busy}
+                      aria-label={`Rename ${c.title}`}
+                      title="Rename"
+                      onClick={() => {
+                        const name = window.prompt('Rename this chat', c.title)
+                        if (name) renameChat(c.id, name)
+                      }}
+                    >
+                      ✎
+                    </button>
+                    <button
+                      type="button"
+                      className="chat-act"
+                      disabled={busy}
+                      aria-label={`Delete ${c.title}`}
+                      title="Delete"
+                      onClick={() => {
+                        if (window.confirm(`Delete "${c.title}"?`)) removeChat(c.id)
+                      }}
+                    >
+                      ×
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
         <nav>
           {nav.map((n) => (
             <button key={n.id} type="button" className={view === n.id ? 'active' : ''} onClick={() => setView(n.id)}>
@@ -259,6 +405,11 @@ function App() {
         <header className="topbar">
           <h2>{VIEW_TITLES[view]}</h2>
           <div className="topbar-right">
+            {view === 'chat' && turns.length > 0 && (
+              <button type="button" className="btn small" onClick={exportChat} title="Save this chat as a Markdown file">
+                Export chat
+              </button>
+            )}
             <div className="theme-switch" role="group" aria-label="Colour theme">
               {([['light', '☀', 'Light'], ['system', '◐', 'Match system'], ['dark', '☾', 'Dark']] as const).map(([id, icon, label]) => (
                 <button key={id} type="button" className={theme === id ? 'on' : ''} title={label} aria-label={label} aria-pressed={theme === id} onClick={() => setTheme(id)}>
@@ -278,7 +429,10 @@ function App() {
             tools={allTools}
             internet={internet}
             onInternet={setInternet}
-            onSend={ask}
+            onSend={(q, files) => ask(q, files)}
+            onStop={stop}
+            onRegenerate={regenerate}
+            onEdit={editFrom}
             onAttach={attachFiles}
             learnables={learnables}
             savedIds={savedIds}
@@ -310,8 +464,10 @@ function App() {
         {view === 'models' && (
           <ModelsView installed={installed} modelId={modelId} profileChoice={profileChoice} onProfileChoice={setProfileChoice} onChoose={chooseModel} onRefresh={() => listChatModels().then(setInstalled)} />
         )}
+        {view === 'evaluate' && <EvalView run={runEval} model={model?.id ?? null} />}
         {view === 'workspace' && <WorkspaceView />}
       </main>
+      {approval && <ApprovalDialog request={approval.request} onAnswer={answerApproval} />}
     </div>
   )
 }

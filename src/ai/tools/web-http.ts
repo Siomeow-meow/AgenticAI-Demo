@@ -83,6 +83,9 @@ export const webHttpTools: Tool[] = [
     name: 'http_request',
     category: 'Internet',
     network: true,
+    // Reading (GET) is harmless; anything that sends or changes data asks first.
+    confirm: ({ method = '' }) => method.trim().toUpperCase() !== 'GET',
+    describe: ({ method, url, body }) => `${method.toUpperCase()} ${url.slice(0, 80)}${body ? ` with a body of ${body.length} characters` : ''}`,
     description: 'Call any web API: send a GET, POST, PUT, PATCH or DELETE request with optional headers and a JSON body, and return the response. For connecting to other services (the user supplies the address and any key).',
     keywords: 'http api request post get put delete rest endpoint json call service integration webhook curl fetch api send data to saas github jira stripe',
     parameters: {

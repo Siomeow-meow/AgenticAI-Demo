@@ -50,6 +50,8 @@ export const commsTools: Tool[] = [
     name: 'post_webhook',
     category: 'Communication',
     network: true,
+    confirm: true,
+    describe: ({ url, message }) => `Post "${message.slice(0, 80)}" to ${url.slice(0, 60)}...`,
     description: 'Post a message to a Slack, Microsoft Teams or Discord channel through its incoming-webhook URL (the user must provide the URL).',
     keywords: 'slack teams discord webhook post message channel announce chat send to channel team notify group',
     parameters: {

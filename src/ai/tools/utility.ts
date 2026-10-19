@@ -77,11 +77,6 @@ export const utilityTools: Tool[] = [
     keywords: 'math calculate compute plus minus times divide percent percentage sum total multiply sqrt square root sin cos tan log ln exp factorial power pi trigonometry logarithm exponent scientific',
     trigger: /\d\s*%|(?<![\d.])\d+\s*[-+*/^x×÷]\s*\d|percent/i,
     parameters: { expr: { type: 'string', description: 'Expression using + - * / % ^ ! parentheses, functions (sqrt, cbrt, abs, sin, cos, tan, asin, acos, atan, ln, log, log2, exp, floor, ceil, round, min, max, pow, ncr, npr, gamma) and constants (pi, e, tau, phi). Angles are in radians (use sind, cosd, tand for degrees). Example: 0.15*48000' } },
-    match: (m) => {
-      const expr = m.match(/[\d(][\d\s+\-*/%^().xX]*[\d)]/)?.[0]
-      if (expr && /^\d+(-\d+){2,}$/.test(expr)) return null // "3-2-1" or "2026-10-15" is a name or a date, not subtraction
-      return expr && /[+\-*/%^xX]/.test(expr) ? { expr } : null
-    },
     run: ({ expr }) => {
       try {
         return String(+calculate(expr).toPrecision(12))
@@ -96,7 +91,6 @@ export const utilityTools: Tool[] = [
     description: 'Get the current date and time, optionally in a given time zone.',
     keywords: 'time clock date today now timezone hour what time',
     parameters: { timezone: { type: 'string', description: 'IANA zone like Asia/Manila or America/New_York; empty for local', optional: true } },
-    match: (m) => (/\b(what time|current time|today.?s date|what.*date|time now|time is it)\b/i.test(m) ? {} : null),
     run: ({ timezone }) => {
       try {
         return new Date().toLocaleString('en-US', {

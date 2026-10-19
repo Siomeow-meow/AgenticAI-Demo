@@ -13,8 +13,6 @@ export const companyTools: Tool[] = [
     keywords: 'employee staff person who is contact email phone department team manager leave balance directory',
     dynamicKeywords: () => employeeStore.get().slice(0, 5000).map((e) => `${e.name} ${e.role} ${e.department}`).join(' '),
     parameters: { query: { type: 'string', description: 'Name, role or department, e.g. "Maria" or "Finance"' } },
-    match: (m) =>
-      /\b(who is|employee|contact|email|leave balance|leave days|works? in|department)\b/i.test(m) ? { query: m } : null,
     run: ({ query }) => {
       const found = fuzzyFind(employeeStore.get(), query, (e) => `${e.name} ${e.role} ${e.department}`)
       if (!found.length) {
@@ -34,7 +32,6 @@ export const companyTools: Tool[] = [
     keywords: 'stock inventory sku warehouse items quantity reorder low supply',
     dynamicKeywords: () => inventoryStore.get().slice(0, 5000).map((i) => `${i.name} ${i.sku}`).join(' '),
     parameters: { query: { type: 'string', description: 'Item name or SKU; empty for low-stock items', optional: true } },
-    match: (m) => (/\b(stock|inventory|sku|reorder|low stock)\b/i.test(m) ? { query: /\blow\b/i.test(m) ? '' : m } : null),
     run: ({ query = '' }) => {
       const inventory = inventoryStore.get()
       const items = query.trim()
@@ -56,11 +53,6 @@ export const companyTools: Tool[] = [
     keywords: 'sales revenue orders region quarter income performance report',
     dynamicKeywords: () => [...new Set(salesStore.get().map((s) => `${s.region} ${s.month}`))].join(' '),
     parameters: { region: { type: 'string', description: 'Region name; empty for all regions', optional: true } },
-    match: (m) => {
-      if (!/\b(sales|revenue|orders)\b/i.test(m)) return null
-      const known = [...new Set(salesStore.get().map((s) => s.region))]
-      return { region: known.find((r) => r && m.toLowerCase().includes(r.toLowerCase())) ?? '' }
-    },
     run: ({ region = '' }) => {
       const r = region.trim().toLowerCase()
       const sales = salesStore.get()
@@ -85,12 +77,6 @@ export const companyTools: Tool[] = [
       title: { type: 'string', description: 'Short description of the problem' },
       priority: { type: 'string', description: 'low, medium or high', optional: true },
     },
-    match: (m) => {
-      if (!/\b(create|raise|file|log|open a|new)\b.*\b(ticket|issue)\b/i.test(m)) return null
-      const title = m.replace(/^.*?\b(ticket|issue)\b\s*(for|about|regarding|:|-)?\s*/i, '').trim() || m
-      const priority = /\b(urgent|high)\b/i.test(m) ? 'high' : /\blow\b/i.test(m) ? 'low' : 'medium'
-      return { title, priority }
-    },
     run: ({ title, priority = 'medium' }) => {
       const p: Ticket['priority'] = priority === 'high' || priority === 'low' ? priority : 'medium'
       const t = addTicket(title, p)
@@ -103,7 +89,6 @@ export const companyTools: Tool[] = [
     description: 'List all support tickets created so far.',
     keywords: 'tickets list show my open all support issues status',
     parameters: {},
-    match: (m) => (/\btickets?\b/i.test(m) && /\b(list|show|my|all|open)\b/i.test(m) ? {} : null),
     run: () => {
       const all = ticketStore.get()
       return all.length ? all.map((t) => `${t.id} [${t.priority}] ${t.title} (${t.createdAt})`).join('\n') : 'No tickets yet.'

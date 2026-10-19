@@ -98,8 +98,35 @@ export async function listChatModels(): Promise<InstalledModel[] | null> {
         paramsB,
         contextLength,
       }))
+      // Most capable first: models that can use tools, then the biggest, then by name.
+      .sort((a, b) => Number(b.tools) - Number(a.tools) || b.sizeGB - a.sizeGB || a.name.localeCompare(b.name))
   } catch {
     return null
+  }
+}
+
+/** Share of a loaded model that sits in GPU memory (0 to 1), or null when it is not loaded. 0 means a CPU-only machine. */
+export async function gpuShare(name: string): Promise<number | null> {
+  try {
+    const m = (await ollama.ps()).models.find((x) => x.name === name || x.model === name)
+    return m && m.size ? m.size_vram / m.size : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Load the model at the wanted context window and check how much of it ended up in GPU memory. If part of it spilled onto the
+ * CPU, halve the window and try again (down to 4096), so the model stays fully on the GPU where possible.
+ * On a machine with no GPU there is nothing to gain, so the wanted size is kept.
+ */
+export async function fitContext(name: string, want: number): Promise<{ ctx: number; gpu: number | null }> {
+  let ctx = want
+  for (;;) {
+    await ollama.chat({ model: name, messages: [{ role: 'user', content: 'hi' }], stream: false, keep_alive: '5m', options: { num_ctx: ctx, num_predict: 1 } })
+    const gpu = await gpuShare(name)
+    if (gpu === null || gpu === 0 || gpu >= 0.97 || ctx <= 4096) return { ctx, gpu }
+    ctx = Math.max(4096, Math.floor(ctx / 2))
   }
 }
 

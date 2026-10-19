@@ -14,7 +14,13 @@ interface Active {
 let active: Active | null = null
 
 /** Runtime switches shared with tools (set by the chat agent for each question). */
-export const runtime = { network: false, /** Passages knowledge searches return (from the model profile). */ ragK: 3 }
+export const runtime = {
+  network: false,
+  /** Passages knowledge searches return (from the model profile). */
+  ragK: 3,
+  /** True once this answer has used text from the web or the documents, which could contain hidden instructions. */
+  tainted: false,
+}
 
 export function setGenerateModel(model: Active | null) {
   active = model

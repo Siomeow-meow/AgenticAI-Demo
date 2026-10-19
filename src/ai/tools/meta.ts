@@ -1,3 +1,4 @@
+import { guard, producesUntrustedText } from '../approval'
 import { runtime } from '../generate'
 import { TOOL_EXAMPLES } from '../tool-examples'
 import type { Tool } from '../tool-types'
@@ -59,8 +60,11 @@ export function metaTools(getTools: () => Tool[]): Tool[] {
           const args = Object.fromEntries(
             Object.entries(step.args ?? {}).map(([k, v]) => [k, typeof v === 'string' ? v.split('$prev').join(prev) : String(v)]),
           )
+          const refused = await guard(tool, args)
+          if (refused) return `${out.join('\n')}\nStep ${i + 1} (${tool.name}): ${refused} Stopped.`.trim()
           try {
             prev = String(await tool.run(args))
+            if (producesUntrustedText(tool)) runtime.tainted = true
           } catch (e) {
             return `${out.join('\n')}\nStep ${i + 1} (${tool.name}) failed: ${(e as Error).message}. Stopped.`.trim()
           }
