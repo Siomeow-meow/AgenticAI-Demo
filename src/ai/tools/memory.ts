@@ -111,6 +111,8 @@ export const memoryTools: Tool[] = [
   {
     name: 'forget',
     category: 'Memory & state',
+    confirm: true,
+    describe: ({ key }) => `Delete the remembered fact "${key}"`,
     description: 'Delete one remembered fact by its label.',
     keywords: 'forget delete remove erase clear memory stop remembering wipe',
     parameters: { key: { type: 'string', description: 'The label of the memory to delete' } },

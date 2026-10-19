@@ -22,10 +22,6 @@ export const textTools: Tool[] = [
     description: 'Count words, characters, sentences and estimate reading time for a piece of text.',
     keywords: 'count words characters length sentences reading time statistics how long word count',
     parameters: { text: { type: 'string', description: 'The text to analyse' } },
-    match: (m) => {
-      const text = m.match(/["“]([^"”]+)["”]/)?.[1]
-      return text && /\b(count|length)\b/i.test(m) ? { text } : null
-    },
     run: ({ text }) => {
       const words = text.trim() ? text.trim().split(/\s+/).length : 0
       const sentences = (text.match(/[.!?]+(\s|$)/g) ?? []).length || (words ? 1 : 0)

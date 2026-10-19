@@ -54,14 +54,33 @@ Open the address Vite prints (usually http://localhost:5173) and pick a model in
 
 `search_knowledge_base` uses the fast pipeline (no extra model calls). The accurate and deep tools make several model calls, so they are slower, especially on small models.
 
-**Views**: Chat, Toolkit, Knowledge (documents the assistant can search), Models (install, switch and remove Ollama models) and Workspace (notes and tasks).
+**How the agent works on a request**
+
+1. **Plan** (medium and large models): a request that needs several steps ("calculate X, then draft an email with it") gets a short numbered plan first. The plan is shown in the reply, and tools for every step are offered, not just the first.
+2. **Act**: the model picks tools, and the status line shows what it is doing ("Using calculator…"). Small models that skip the knowledge base when a document clearly matches get the search run for them.
+3. **Approve**: actions that change something outside the chat (`write_file`, `export_dataset`, `post_webhook`, `http_request` other than GET, `forget`) ask in a dialog first. This also applies to every step of `chain_tools`.
+4. **Check** (medium and large models): an answer that used tools is compared with what the tools returned. If it contradicts them, it is rewritten once, and the reply says so.
+5. **Prompt-injection guard**: text from web pages and documents is wrapped as data, and once an answer has read such text, risky actions ask again even if you chose "Always allow".
+
+**Chat**: several saved chats (search, rename, delete, titles from the first question), a **Stop** button, **Edit** on any question and **Regenerate** on the last answer, **Export chat** to Markdown, a jump-to-latest button, and a timing line under each reply (first word, tokens per second, context size, GPU share).
+
+**Views**: Chat, Toolkit, Knowledge (documents the assistant can search), Models (install, switch and remove Ollama models, performance profile), **Evaluate** (below) and Workspace (notes, tasks and memory).
+
+**Evaluate**: runs 32 fixed questions (maths, documents, honesty about things the documents do not cover, company data, actions, plain chat) against the selected model and scores which tools it used and what it answered. Runs are saved so a change to a model, profile or prompt can be compared with the run before it. Add your own cases in `src/eval/cases.ts`.
+
+**Not built (needs a server or accounts)**: background and scheduled work, and connections to services such as email, calendars or GitHub. `http_request` covers one-off API calls.
 
 ## How the pieces fit
 
 | File | Role |
 |---|---|
 | `src/App.tsx` | App shell: model choice, chat state, views |
-| `src/ai/llm.ts` | Agent loop for Ollama models: system prompt, tool calling, streaming |
+| `src/ai/llm.ts` | Agent loop for Ollama models: system prompt, tool calling, streaming, stop, status, planning and answer checking |
+| `src/ai/reflect.ts` | Detects multi-step requests, writes the plan, and checks an answer against the tool results |
+| `src/ai/approval.ts` | Approval before risky actions and the prompt-injection guard |
+| `src/ai/history.ts` | Fits the conversation into the context window and summarises what does not fit |
+| `src/useConversations.ts` | Saved chats |
+| `src/eval/cases.ts` | The evaluation questions and how they are graded |
 | `src/ai/profile.ts` | Tunes the agent to the installed model: context size, tools per question, steps, reasoning |
 | `src/ai/router.ts` | Picks the few tools shown to the model for each question |
 | `src/ai/rag.ts` | Chunking, keyword (TF-IDF) search, optional semantic search, rank fusion |

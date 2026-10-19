@@ -38,7 +38,6 @@ export function knowledgeTools({ index, docs, semantic }: ToolContext): Tool[] {
         query: { type: 'string', description: 'What to look up, in a few keywords' },
         document: { type: 'string', description: 'Only search the document with this id or title', optional: true },
       },
-      match: (query) => ({ query }),
       run: async ({ query, document }) => {
         const { passages, q } = await smartRetrieve({ index, semantic }, query, document)
         if (!passages.length) {

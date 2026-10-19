@@ -15,7 +15,7 @@ const short = (s: string, n: number) => {
   return flat.length > n ? `${flat.slice(0, n - 1)}…` : flat
 }
 
-/** The tool results of one turn as a short note, so later questions ("email her", "and double that") still have the facts. */
+/** What tools returned in one turn, as short lines, so later questions ("email her", "and double that") still have the facts. */
 export function compactCalls(calls: ToolCall[]): string {
   const notes = calls
     .filter((c) => c.result && !/^(Unknown|Tool error)/.test(c.result))
@@ -27,7 +27,7 @@ export function compactCalls(calls: ToolCall[]): string {
         .join(', ')
       return `${c.tool}(${args}) gave: ${short(c.result, 160)}`
     })
-  return notes.length ? `\n\n(Tool results from this turn: ${notes.join('; ')})` : ''
+  return notes.join('\n')
 }
 
 /** Replace code blocks with a placeholder and cut the text short: old replies keep their meaning, not their length. */
@@ -50,7 +50,7 @@ export function fitHistory(history: ChatMsg[], budget: number, keepFull = 2): { 
     const cost = approxTokens(content) + 6
     // Always keep the latest message, even if it alone is large.
     if (kept.length && used + cost > budget) break
-    kept.push({ role: m.role, content })
+    kept.push({ role: m.role, content, ...(m.facts ? { facts: m.facts } : {}) })
     used += cost
   }
   kept.reverse()

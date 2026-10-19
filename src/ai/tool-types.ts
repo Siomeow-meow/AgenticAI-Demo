@@ -28,10 +28,12 @@ export interface Tool {
   parameters: Record<string, ToolParam>
   /** True if the tool calls an external web service (can be switched off). */
   network?: boolean
+  /** Needs the user's approval before it runs (it changes something outside the chat). A function decides per call. */
+  confirm?: boolean | ((args: Record<string, string>) => boolean)
+  /** One line describing what a call will do, shown in the approval dialog. */
+  describe?: (args: Record<string, string>) => string
   /** If the result is worth keeping, describe it so the UI can offer "Save to knowledge". */
   learn?: (args: Record<string, string>, result: string) => Learnable | null
-  /** Offline (no-LLM) agent only: returns args if this tool applies to the message. */
-  match?: (message: string) => Record<string, string> | null
   run: (args: Record<string, string>) => string | Promise<string>
 }
 

@@ -35,6 +35,8 @@ export const fileOutTools: Tool[] = [
   {
     name: 'write_file',
     category: 'Files',
+    confirm: true,
+    describe: ({ filename }) => `Create the file "${filename}" and download it to your computer`,
     description: 'Create a text file (CSV, JSON, Markdown, text, HTML, ...) with the given content and download it to the user\'s computer.',
     keywords: 'write file create save download export generate document csv json markdown txt report output make a file save as',
     parameters: {
@@ -52,6 +54,8 @@ export const fileOutTools: Tool[] = [
   {
     name: 'export_dataset',
     category: 'Files',
+    confirm: true,
+    describe: ({ name, format = 'csv' }) => `Export the table "${name}" as ${format} and download it`,
     description: 'Download one of the imported tables as a CSV or JSON file.',
     keywords: 'export dataset table download csv json save data spreadsheet extract imported table to file',
     parameters: {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, ClipboardEvent, DragEvent, ReactNode } from 'react'
-import type { AgentReply } from '../ai/agent'
+import type { Turn } from '../ai/agent'
 import type { SourceDoc } from '../ai/documents'
 import { ATTACH_ACCEPT } from '../ai/files'
 import type { Attachment } from '../ai/files'
@@ -8,10 +8,15 @@ import { TOOL_EXAMPLES } from '../ai/tool-examples'
 import { Markdown } from './Markdown'
 import type { Tool, ToolCall } from '../ai/tools'
 
-export interface Turn {
+export type { Turn }
+
+/** The reply being written right now. */
+export interface Pending {
   question: string
-  reply: AgentReply
-  attachments?: Attachment[]
+  text: string
+  attachments: Attachment[]
+  /** What the agent is doing at the moment ("Planning…", "Using calculator…"). */
+  status?: string
 }
 
 /** Prompts about the written lessons and company documents (the tools supply the rest). */
@@ -55,11 +60,16 @@ const DEFAULT_FILE_PROMPT = 'Look at the attached file(s): tell me what is in th
 
 interface Props {
   turns: Turn[]
-  pending: { question: string; text: string; attachments: Attachment[] } | null
+  pending: Pending | null
   tools: Tool[]
   internet: boolean
   onInternet: (on: boolean) => void
   onSend: (question: string, attachments: Attachment[]) => void
+  onStop: () => void
+  /** Ask the same question again (the last turn only). */
+  onRegenerate: () => void
+  /** Remove this question and everything after it so it can be edited and sent again. */
+  onEdit: (index: number) => void
   onAttach: (files: File[]) => Promise<Attachment[]>
   learnables: (calls: ToolCall[]) => SourceDoc[]
   savedIds: Set<string>
@@ -67,7 +77,7 @@ interface Props {
   modelPicker: ReactNode
 }
 
-export function Chat({ turns, pending, tools, internet, onInternet, onSend, onAttach, learnables, savedIds, onSave, modelPicker }: Props) {
+export function Chat({ turns, pending, tools, internet, onInternet, onSend, onStop, onRegenerate, onEdit, onAttach, learnables, savedIds, onSave, modelPicker }: Props) {
   const endRef = useRef<HTMLDivElement>(null)
   const scroller = useRef<HTMLDivElement>(null)
   // Follow the reply as it is written, but only while the reader is at the bottom: scrolling up stops the following.
@@ -76,6 +86,8 @@ export function Chat({ turns, pending, tools, internet, onInternet, onSend, onAt
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [reading, setReading] = useState(false)
   const [dragging, setDragging] = useState(false)
+  // Editing a question puts its text back in the box (a new key makes the box start from it).
+  const [draft, setDraft] = useState({ text: '', key: 0 })
 
   useEffect(() => {
     if (follow.current) endRef.current?.scrollIntoView({ behavior: pending?.text ? 'auto' : 'smooth', block: 'end' })
@@ -147,11 +159,24 @@ export function Chat({ turns, pending, tools, internet, onInternet, onSend, onAt
         <div className="chat-col">
           {empty && <Welcome tools={tools} internet={internet} onSend={(q) => send(q)} />}
           {turns.map((t, i) => (
-            <Message key={i} turn={t} learnable={learnables(t.reply.calls)} savedIds={savedIds} onSave={onSave} />
+            <Message
+              key={i}
+              turn={t}
+              learnable={learnables(t.reply.calls)}
+              savedIds={savedIds}
+              onSave={onSave}
+              canChange={!pending}
+              onEdit={() => {
+                setDraft((d) => ({ text: t.question, key: d.key + 1 }))
+                onEdit(i)
+              }}
+              onRegenerate={i === turns.length - 1 ? onRegenerate : undefined}
+            />
           ))}
           {pending && (
             <Message
               turn={{ question: pending.question, attachments: pending.attachments, reply: { text: pending.text, calls: [], sources: [] } }}
+              status={pending.status}
               learnable={[]}
               savedIds={savedIds}
               onSave={onSave}
@@ -167,6 +192,9 @@ export function Chat({ turns, pending, tools, internet, onInternet, onSend, onAt
         )}
       </div>
       <Composer
+        key={draft.key}
+        initialText={draft.text}
+        onStop={onStop}
         busy={pending !== null}
         reading={reading}
         attachments={attachments}
@@ -250,12 +278,20 @@ function Message({
   savedIds,
   onSave,
   streaming = false,
+  status,
+  canChange = false,
+  onEdit,
+  onRegenerate,
 }: {
   turn: Turn
   learnable: SourceDoc[]
   savedIds: Set<string>
   onSave: (doc: SourceDoc) => void
   streaming?: boolean
+  status?: string
+  canChange?: boolean
+  onEdit?: () => void
+  onRegenerate?: () => void
 }) {
   const { question, reply, attachments } = turn
   const [copied, setCopied] = useState(false)
@@ -272,10 +308,28 @@ function Message({
       <div className="user-msg">
         {attachments && attachments.length > 0 && <AttachmentChips list={attachments} />}
         {question}
+        {onEdit && canChange && (
+          <button type="button" className="msg-edit" onClick={onEdit} title="Edit this question and ask again (removes the replies after it)" aria-label="Edit question">
+            ✎
+          </button>
+        )}
       </div>
       <div className="assistant-msg">
         <div className="avatar">✦</div>
         <div className="assistant-body">
+          {reply.plan && reply.plan.length > 0 && (
+            <details className="step plan">
+              <summary>
+                <span className="step-icon">☰</span> Plan <span className="muted">({reply.plan.length} steps)</span>
+              </summary>
+              <ol>
+                {reply.plan.map((s, k) => (
+                  <li key={k}>{s}</li>
+                ))}
+              </ol>
+            </details>
+          )}
+          {streaming && status && <div className="status-line">{status}</div>}
           {reply.calls.map((c, j) => (
             <details key={j} className="step">
               <summary>
@@ -292,11 +346,27 @@ function Message({
             <div className={`answer${streaming ? ' streaming' : ''}`}>
               <Markdown text={reply.text} />
             </div>
+          ) : reply.stopped ? (
+            <div className="answer muted">Stopped before an answer was written.</div>
           ) : (
             <div className="thinking">
               <span />
               <span />
               <span />
+            </div>
+          )}
+          {reply.stopped && reply.text && <div className="reply-stats">Stopped by you. The reply above is incomplete.</div>}
+          {reply.check && !streaming && (
+            <div className={`check-tag ${reply.check}`} title="The answer was compared with what the tools returned">
+              {reply.check === 'ok' ? '✓ Checked against the tool results' : '↻ Rewritten after a check found a mismatch with the tool results'}
+            </div>
+          )}
+          {reply.stats && !streaming && (
+            <div className="reply-stats" title="How long this reply took and how it was produced">
+              {reply.stats.firstSec.toFixed(1)} s to first word · {reply.stats.tokensPerSec ? `${reply.stats.tokensPerSec.toFixed(0)} tokens/s · ` : ''}
+              read {reply.stats.promptTokens.toLocaleString('en-US')} tokens · {Math.round(reply.stats.ctx / 1024)}k context
+              {reply.stats.loadSec > 1 ? ` · loaded the model in ${reply.stats.loadSec.toFixed(0)} s` : ''}
+              {reply.stats.gpu !== null ? ` · ${reply.stats.gpu === 0 ? 'CPU only' : `${Math.round(reply.stats.gpu * 100)}% on GPU`}` : ''}
             </div>
           )}
           {reply.sources.length > 0 && (
@@ -320,6 +390,11 @@ function Message({
               <button type="button" className="ghost" onClick={copy}>
                 {copied ? 'Copied' : 'Copy'}
               </button>
+              {onRegenerate && canChange && (
+                <button type="button" className="ghost" onClick={onRegenerate} title="Ask the same question again">
+                  Regenerate
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -329,6 +404,8 @@ function Message({
 }
 
 function Composer({
+  initialText,
+  onStop,
   busy,
   reading,
   attachments,
@@ -339,6 +416,8 @@ function Composer({
   onSend,
   modelPicker,
 }: {
+  initialText: string
+  onStop: () => void
   busy: boolean
   reading: boolean
   attachments: Attachment[]
@@ -349,7 +428,7 @@ function Composer({
   onSend: (q: string) => void
   modelPicker: ReactNode
 }) {
-  const [text, setText] = useState('')
+  const [text, setText] = useState(initialText)
   const ref = useRef<HTMLTextAreaElement>(null)
   const hasFiles = attachments.some((a) => a.kind !== 'error')
   const canSend = !busy && !reading && (text.trim() !== '' || hasFiles)
@@ -424,11 +503,19 @@ function Composer({
           </button>
           <span className="spacer" />
           {modelPicker}
-          <button type="submit" className="send" disabled={!canSend} aria-label="Send message">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 19V5M5 12l7-7 7 7" />
-            </svg>
-          </button>
+          {busy ? (
+            <button type="button" className="send stop" onClick={onStop} aria-label="Stop generating" title="Stop">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+            </button>
+          ) : (
+            <button type="submit" className="send" disabled={!canSend} aria-label="Send message">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 19V5M5 12l7-7 7 7" />
+              </svg>
+            </button>
+          )}
         </div>
       </form>
       <p className="fineprint">AI can make mistakes. Check important facts, numbers and policies. Attached files stay on this computer.</p>
